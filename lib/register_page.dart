@@ -1,15 +1,14 @@
 import 'dart:io';
 import 'dart:io' show Platform;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:location/location.dart';
+import 'package:geolocator/geolocator.dart';
+
 import 'package:unknown/home_page.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -26,9 +25,8 @@ class _RegisterPageState extends State<RegisterPage>
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
 
-  // Camera & Location
+  // Camera
   final ImagePicker _picker = ImagePicker();
-  final Location location = Location();
 
   File? _capturedImage;
   double? latitude;
@@ -36,9 +34,6 @@ class _RegisterPageState extends State<RegisterPage>
 
   // Location state
   bool _fetchingLocation = false;
-  bool _serviceEnabled = false;
-  PermissionStatus? _permissionGranted;
-  LocationData? _locationData;
 
   // Animations
   late AnimationController _controller;
@@ -72,9 +67,75 @@ class _RegisterPageState extends State<RegisterPage>
     _controller.forward();
   }
 
+  // 📍 LOCATION (WINDOWS + MOBILE)
+  Future<void> _getCurrentLocation() async {
+    setState(() => _fetchingLocation = true);
+
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() => _fetchingLocation = false);
+      throw Exception("Location services are disabled");
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      setState(() => _fetchingLocation = false);
+      throw Exception("Location permission denied");
+    }
+
+    final position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    setState(() {
+      latitude = position.latitude;
+      longitude = position.longitude;
+      _fetchingLocation = false;
+    });
+  }
+
+  // 📸 PHOTO + LOCATION
+  Future<void> _takePhoto() async {
+    // -------------------------------
+    // WINDOWS
+    // -------------------------------
+    if (Platform.isWindows) {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+      );
+
+      if (result == null) return;
+
+      setState(() {
+        _capturedImage = File(result.files.single.path!);
+      });
+
+      await _getCurrentLocation();
+      return;
+    }
+
+    // -------------------------------
+    // ANDROID / IOS
+    // -------------------------------
+    final XFile? photo =
+        await _picker.pickImage(source: ImageSource.camera);
+
+    if (photo == null) return;
+
+    setState(() {
+      _capturedImage = File(photo.path);
+    });
+
+    await _getCurrentLocation();
+  }
+
   Future<void> _registerUser() async {
     try {
-      // 1️⃣ Check username already exists
       final existingUser = await FirebaseFirestore.instance
           .collection('users')
           .where('username', isEqualTo: idController.text.trim())
@@ -87,7 +148,6 @@ class _RegisterPageState extends State<RegisterPage>
         return;
       }
 
-      // 2️⃣ Upload image
       final ref = FirebaseStorage.instance
           .ref()
           .child('user_photos')
@@ -96,17 +156,15 @@ class _RegisterPageState extends State<RegisterPage>
       await ref.putFile(_capturedImage!);
       final imageUrl = await ref.getDownloadURL();
 
-      // 3️⃣ Save user data
       await FirebaseFirestore.instance.collection('users').add({
         'username': idController.text.trim(),
-        'password': passwordController.text.trim(), // ⚠️ plain text
+        'password': passwordController.text.trim(), // ⚠️ demo only
         'imageUrl': imageUrl,
         'latitude': latitude,
         'longitude': longitude,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // 4️⃣ Go to home
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -123,87 +181,6 @@ class _RegisterPageState extends State<RegisterPage>
       );
     }
   }
-
-  // 📍 YOUR LOCATION FUNCTION (USED DIRECTLY)
-  Future<void> _requestLocation() async {
-    _serviceEnabled = await location.serviceEnabled();
-    if (!_serviceEnabled) {
-      _serviceEnabled = await location.requestService();
-      if (!_serviceEnabled) {
-        setState(() => _fetchingLocation = false);
-        return;
-      }
-    }
-
-    _permissionGranted = await location.hasPermission();
-    if (_permissionGranted == PermissionStatus.denied) {
-      _permissionGranted = await location.requestPermission();
-      if (_permissionGranted != PermissionStatus.granted) {
-        setState(() => _fetchingLocation = false);
-        return;
-      }
-    }
-
-    _locationData = await location.getLocation();
-
-    setState(() {
-      latitude = _locationData?.latitude;
-      longitude = _locationData?.longitude;
-      _fetchingLocation = false;
-    });
-  }
-
-  
-
-  Future<void> getWindowsLocation() async {
-    final response =
-        await http.get(Uri.parse('https://ipapi.co/json/'));
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-
-      latitude = data['latitude'];
-      longitude = data['longitude'];
-    }
-  }
-
-  // 📸 CAMERA + 📍 LOCATION
-  Future<void> _takePhoto() async {
-  // -------------------------------
-  // WINDOWS DESKTOP
-  // -------------------------------
-  if (Platform.isWindows) {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-    );
-
-    if (result == null) return;
-
-    setState(() {
-      _capturedImage = File(result.files.single.path!);
-    });
-
-    await getWindowsLocation(); // 🌍 IP-based
-    return;
-  }
-
-
-  // -------------------------------
-  // MOBILE (ANDROID / IOS)
-  // -------------------------------
-  final XFile? photo =
-      await _picker.pickImage(source: ImageSource.camera);
-
-  if (photo == null) return;
-
-  setState(() {
-    _capturedImage = File(photo.path);
-    _fetchingLocation = true;
-  });
-
-  await _requestLocation();
-}
-
 
   @override
   void dispose() {
@@ -269,7 +246,6 @@ class _RegisterPageState extends State<RegisterPage>
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-
                         const SizedBox(height: 30),
 
                         TextFormField(
@@ -277,7 +253,6 @@ class _RegisterPageState extends State<RegisterPage>
                           decoration:
                               _inputDecoration("Name", Icons.person),
                         ),
-
                         const SizedBox(height: 16),
 
                         TextFormField(
@@ -285,7 +260,6 @@ class _RegisterPageState extends State<RegisterPage>
                           decoration:
                               _inputDecoration("User ID / Email", Icons.badge),
                         ),
-
                         const SizedBox(height: 16),
 
                         TextFormField(
@@ -294,7 +268,6 @@ class _RegisterPageState extends State<RegisterPage>
                           decoration:
                               _inputDecoration("Create Password", Icons.lock),
                         ),
-
                         const SizedBox(height: 16),
 
                         TextFormField(
@@ -303,10 +276,8 @@ class _RegisterPageState extends State<RegisterPage>
                           decoration: _inputDecoration(
                               "Re-enter Password", Icons.lock_outline),
                         ),
-
                         const SizedBox(height: 16),
 
-                        // 📷 TAKE PHOTO FIELD
                         TextFormField(
                           readOnly: true,
                           onTap: _takePhoto,
@@ -350,7 +321,9 @@ class _RegisterPageState extends State<RegisterPage>
                                   latitude == null ||
                                   longitude == null) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Photo & location required")),
+                                  const SnackBar(
+                                      content: Text(
+                                          "Photo & location required")),
                                 );
                                 return;
                               }
@@ -358,13 +331,14 @@ class _RegisterPageState extends State<RegisterPage>
                               if (passwordController.text !=
                                   confirmPasswordController.text) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Passwords do not match")),
+                                  const SnackBar(
+                                      content:
+                                          Text("Passwords do not match")),
                                 );
                                 return;
                               }
                               _registerUser();
                             },
-
                             child: const Text(
                               "Register",
                               style: TextStyle(

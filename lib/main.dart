@@ -2,11 +2,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:unknown/admin_login.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'firebase_options.dart';
 import 'home_page.dart';
 import 'register_page.dart';
+import 'dart:math';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,32 +77,68 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Future<void> _login() async {
-  final query = await FirebaseFirestore.instance
-      .collection('users')
-      .where('username', isEqualTo: usernameController.text.trim())
-      .where('password', isEqualTo: passwordController.text.trim())
-      .get();
+    final query = await FirebaseFirestore.instance
+        .collection('users')
+        .where('username', isEqualTo: usernameController.text.trim())
+        .where('password', isEqualTo: passwordController.text.trim())
+        .get();
 
-  if (query.docs.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Invalid credentials")),
+    if (query.docs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Invalid credentials")),
+      );
+      return;
+    }
+
+    final doc = query.docs.first;
+    final data = doc.data();
+
+    // 🔴 Check if boundary exists
+    if (data['boundary'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Access denied: Boundary not set")),
+      );
+      return;
+    }
+
+    final userLat = data['latitude'];
+    final userLng = data['longitude'];
+
+    final boundaryLat = data['boundary']['lat'];
+    final boundaryLng = data['boundary']['lng'];
+
+    final distance = _calculateDistanceMeters(
+      userLat,
+      userLng,
+      boundaryLat,
+      boundaryLng,
     );
-    return;
+
+    // 🔐 20 meter check
+    if (distance > 20) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Access denied: You are ${distance.toStringAsFixed(1)}m away from allowed area",
+          ),
+        ),
+      );
+      return;
+    }
+
+    // ✅ ALLOWED → LOGIN
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HomePage(
+          name: data['name'],
+          latitude: userLat,
+          longitude: userLng,
+        ),
+      ),
+    );
   }
 
-  final data = query.docs.first.data();
-
-  Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(
-      builder: (_) => HomePage(
-        name: data['name'], // ✅ FETCH NAME
-        latitude: data['latitude'],
-        longitude: data['longitude'],
-      ),
-    ),
-  );
-}
 
 
   InputDecoration _input(String label, IconData icon) {
@@ -113,6 +152,30 @@ class _LoginPageState extends State<LoginPage>
         borderSide: BorderSide.none,
       ),
     );
+  }
+
+  double _calculateDistanceMeters(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const double earthRadius = 6371000; // meters
+    double dLat = _degToRad(lat2 - lat1);
+    double dLon = _degToRad(lon2 - lon1);
+
+    double a =
+        (sin(dLat / 2) * sin(dLat / 2)) +
+        cos(_degToRad(lat1)) *
+            cos(_degToRad(lat2)) *
+            (sin(dLon / 2) * sin(dLon / 2));
+
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  double _degToRad(double deg) {
+    return deg * (pi / 180);
   }
 
   @override
@@ -131,7 +194,14 @@ class _LoginPageState extends State<LoginPage>
             SizedBox(height: 50,),
             Padding(
               padding: const EdgeInsets.fromLTRB(250, 0, 0, 0),
-              child: ElevatedButton(onPressed: (){}, child: Text('ADMIN'),),
+              child: ElevatedButton(onPressed: (){
+                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>  AdminLoginPage(),
+                                          ),
+                                        );
+              }, child: Text('ADMIN'),),
             ),
             SizedBox(height: 150,),
             Center(

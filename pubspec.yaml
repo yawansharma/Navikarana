@@ -11,13 +11,21 @@ dependencies:
     sdk: flutter
   image_picker: ^1.0.7
   location: ^8.0.1
-  file_picker: ^6.1.1
+  file_picker: ^10.3.8
   http: ^1.2.0
   firebase_core: ^3.15.2
   cloud_firestore: ^5.4.5
   firebase_auth: ^5.3.4
   firebase_storage: ^12.4.10
   geolocator: ^10.1.0
+  camera: ^0.11.3
+  path_provider: ^2.1.5
+  webview_flutter: ^4.13.1
+  url_launcher: ^6.3.2
+  desktop_multi_window: ^0.3.0
+  webview_windows: ^0.4.0
+
+
 
 dev_dependencies:
   flutter_test:
@@ -26,3 +34,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/

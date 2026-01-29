@@ -1,16 +1,37 @@
+import 'dart:io';
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:unknown/eye_test_dialog.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 class HomePage extends StatelessWidget {
-  final String imageUrl;
+  final String name;
   final double latitude;
   final double longitude;
+  final File? photo; // ✅ NEW
 
   const HomePage({
     super.key,
-    required this.imageUrl,
+    required this.name,
     required this.latitude,
     required this.longitude,
+    this.photo,
   });
+
+  // 🧪 OPEN EYE TEST WINDOW (CENTERED)
+  Future<void> _openEyeTest() async {
+    if (!Platform.isWindows) return;
+
+    final htmlPath =
+        '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
+
+    await launchUrl(
+      Uri.file(htmlPath),
+      mode: LaunchMode.externalApplication,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,39 +40,68 @@ class HomePage extends StatelessWidget {
         title: const Text("Home"),
         centerTitle: true,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                imageUrl,
-                height: 220,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return const SizedBox(
-                    height: 220,
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return const SizedBox(
-                    height: 220,
-                    child: Center(child: Text("Failed to load image")),
-                  );
-                },
+            const SizedBox(height: 20),
+
+            Text(
+              "Welcome, $name 👋",
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+
+            // 📸 SHOW PHOTO
+            if (photo != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.file(
+                  photo!,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              )
+            else
+              const Text("No photo available"),
+
+            const SizedBox(height: 30),
 
             _infoTile("Latitude", latitude.toString()),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             _infoTile("Longitude", longitude.toString()),
+
+            const SizedBox(height: 40),
+
+            // 🧪 EYE TEST BUTTON
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+  icon: const Icon(Icons.visibility),
+  label: const Text(
+    "Perform Eye Test",
+    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  ),
+  onPressed: () async {
+    final htmlPath =
+        '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
+
+    await launchUrl(
+      Uri.file(htmlPath),
+      mode: LaunchMode.externalApplication,
+    );
+  },
+),
+
+
+            ),
           ],
         ),
       ),

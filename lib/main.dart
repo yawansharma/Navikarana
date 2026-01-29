@@ -1,16 +1,20 @@
 
 import 'package:flutter/material.dart';
-import 'package:unknown/home_page.dart';
-import 'package:unknown/register_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
 import 'firebase_options.dart';
+import 'home_page.dart';
+import 'register_page.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  //cameras = await availableCameras();
+  
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
-);
+  );
   runApp(const MyApp());
 }
 
@@ -25,7 +29,6 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -47,24 +50,16 @@ class _LoginPageState extends State<LoginPage>
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
+    _controller =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
 
-    _fadeAnim = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeIn,
-    );
+    _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
 
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.15),
       end: Offset.zero,
     ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOut,
-      ),
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
 
     _controller.forward();
@@ -79,41 +74,35 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Future<void> _login() async {
-  try {
-    final query = await FirebaseFirestore.instance
-        .collection('users')
-        .where('username', isEqualTo: usernameController.text.trim())
-        .where('password', isEqualTo: passwordController.text.trim())
-        .get();
+  final query = await FirebaseFirestore.instance
+      .collection('users')
+      .where('username', isEqualTo: usernameController.text.trim())
+      .where('password', isEqualTo: passwordController.text.trim())
+      .get();
 
-    if (query.docs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Invalid username or password")),
-      );
-      return;
-    }
-
-    final data = query.docs.first.data();
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => HomePage(
-          imageUrl: data['imageUrl'],
-          latitude: data['latitude'],
-          longitude: data['longitude'],
-        ),
-      ),
-    );
-  } catch (e) {
+  if (query.docs.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.toString())),
+      const SnackBar(content: Text("Invalid credentials")),
     );
+    return;
   }
+
+  final data = query.docs.first.data();
+
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (_) => HomePage(
+        name: data['name'], // ✅ FETCH NAME
+        latitude: data['latitude'],
+        longitude: data['longitude'],
+      ),
+    ),
+  );
 }
 
 
-  InputDecoration _inputDecoration(String label, IconData icon) {
+  InputDecoration _input(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon),
@@ -134,113 +123,78 @@ class _LoginPageState extends State<LoginPage>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF667EEA),
-              Color(0xFF764BA2),
-            ],
+            colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
           ),
         ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: FadeTransition(
-              opacity: _fadeAnim,
-              child: SlideTransition(
-                position: _slideAnim,
-                child: Card(
-                  elevation: 10,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 30,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          "Welcome Back",
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-
-                        const SizedBox(height: 30),
-
-                        TextFormField(
-                          controller: usernameController,
-                          decoration: _inputDecoration(
-                            "Username / Email",
-                            Icons.account_circle,
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        TextFormField(
-                          controller: passwordController,
-                          obscureText: true,
-                          decoration: _inputDecoration(
-                            "Password",
-                            Icons.lock,
-                          ),
-                        ),
-
-                        const SizedBox(height: 30),
-
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF667EEA),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 4,
-                            ),
-                            onPressed: () {
-                              debugPrint("Login pressed");
-                            },
-                            child: const Text(
-                              "Login",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+        child: Column(
+          children: [
+            SizedBox(height: 50,),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(250, 0, 0, 0),
+              child: ElevatedButton(onPressed: (){}, child: Text('ADMIN'),),
+            ),
+            SizedBox(height: 150,),
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: FadeTransition(
+                  opacity: _fadeAnim,
+                  child: SlideTransition(
+                    position: _slideAnim,
+                    child: Card(
+                      elevation: 10,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text("Welcome Back",
+                                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 24),
+            
+                            TextFormField(controller: usernameController, decoration: _input("Username", Icons.person)),
+                            const SizedBox(height: 14),
+            
+                            TextFormField(controller: passwordController, obscureText: true, decoration: _input("Password", Icons.lock)),
+                            const SizedBox(height: 24),
+            
+                            SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed: _login,
+                                child: const Text("Login"),
                               ),
                             ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const RegisterPage(),
+            
+                            const SizedBox(height: 16),
+            
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const RegisterPage(),
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                "New user? Register here",
+                                style: TextStyle(color: Colors.blue),
                               ),
-                            );
-                          },
-                          child: const Text(
-                            "New user? Register here",
-                            style: TextStyle(
-                              color: Colors.blue,
-                              fontWeight: FontWeight.w600,
                             ),
-                          ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

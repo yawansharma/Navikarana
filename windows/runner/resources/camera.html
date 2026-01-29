@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Camera</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    video {
+      flex: 1;
+      object-fit: cover;
+    }
+    button {
+      height: 60px;
+      font-size: 18px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<video id="video" autoplay></video>
+<button onclick="capture()">📸 Capture</button>
+
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => video.srcObject = stream)
+    .catch(err => alert("Camera error: " + err));
+
+  function capture() {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+
+    const img = canvas.toDataURL("image/png");
+
+    const a = document.createElement("a");
+    a.href = img;
+    a.download = "captured_photo.png";
+    a.click();
+  }
+</script>
+
+</body>
+</html>

@@ -1,16 +1,14 @@
 import 'dart:io';
-import 'dart:io' show Platform;
-
 import 'package:flutter/material.dart';
-import 'package:unknown/eye_test_dialog.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
+
+// ⚠️ IMPORTANT: Import main.dart so we can navigate back to LoginPage
+import 'main.dart'; 
 
 class HomePage extends StatelessWidget {
   final String name;
   final double latitude;
   final double longitude;
-  final File? photo; // ✅ NEW
+  final File? photo;
 
   const HomePage({
     super.key,
@@ -20,118 +18,198 @@ class HomePage extends StatelessWidget {
     this.photo,
   });
 
-  // 🧪 OPEN EYE TEST WINDOW (CENTERED)
-  Future<void> _openEyeTest() async {
-    if (!Platform.isWindows) return;
-
-    final htmlPath =
-        '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
-
-    await launchUrl(
-      Uri.file(htmlPath),
-      mode: LaunchMode.externalApplication,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF101010), // Charcoal Background
       appBar: AppBar(
-        title: const Text("Home"),
+        title: const Text("Dashboard"),
         centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const SizedBox(height: 20),
-
-            Text(
-              "Welcome, $name 👋",
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // 📸 SHOW PHOTO
-            if (photo != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.file(
-                  photo!,
-                  height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              )
-            else
-              const Text("No photo available"),
-
-            const SizedBox(height: 30),
-
-            _infoTile("Latitude", latitude.toString()),
-            const SizedBox(height: 10),
-            _infoTile("Longitude", longitude.toString()),
-
-            const SizedBox(height: 40),
-
-            // 🧪 EYE TEST BUTTON
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-  icon: const Icon(Icons.visibility),
-  label: const Text(
-    "Perform Eye Test",
-    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-  ),
-  onPressed: () async {
-    final htmlPath =
-        '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
-
-    await launchUrl(
-      Uri.file(htmlPath),
-      mode: LaunchMode.externalApplication,
-    );
-  },
-),
-
-
-            ),
-          ],
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.white,
+        // ✅ 1. THE BACK BUTTON
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          tooltip: "Logout",
+          onPressed: () {
+            // ✅ 2. Navigate back to Login Page and clear history
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginPage()),
+              (route) => false, // Remove all previous routes
+            );
+          },
         ),
       ),
-    );
-  }
-
-  Widget _infoTile(String label, String value) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
+      body: Column(
         children: [
-          Text(
-            "$label:",
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
+          // Header Area
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Welcome back,",
+                        style: TextStyle(color: Colors.grey, fontSize: 16),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white, 
+                          fontSize: 28, 
+                          fontWeight: FontWeight.bold
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
+          
+          const SizedBox(height: 20),
+
+          // White Container
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 15),
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    // Pull Handle Visual
+                    Center(
+                      child: Container(
+                        width: 40, 
+                        height: 4, 
+                        margin: const EdgeInsets.only(bottom: 24), 
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300, 
+                          borderRadius: BorderRadius.circular(2)
+                        )
+                      ),
+                    ),
+
+                    // 📸 User Photo
+                    if (photo != null)
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            )
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Image.file(
+                            photo!,
+                            height: 250,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        height: 150,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(Icons.person, size: 80, color: Colors.grey),
+                      ),
+
+                    const SizedBox(height: 24),
+
+                    // 📍 Location Info Card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6A8A73).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.location_on, color: Color(0xFF6A8A73)),
+                              ),
+                              const SizedBox(width: 16),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text("Current Location", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  Text("Lat: ${latitude.toStringAsFixed(4)}", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                  Text("Long: ${longitude.toStringAsFixed(4)}", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 30),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text("Location Status", style: TextStyle(color: Colors.grey.shade600)),
+                              Text("Matched", style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Success Message
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6A8A73).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.check_circle, color: Color(0xFF6A8A73)),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              "You are clocked in successfully!",
+                              style: TextStyle(
+                                color: Color(0xFF6A8A73),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+              ),
             ),
-          ),
+          )
         ],
       ),
     );

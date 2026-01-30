@@ -1,12 +1,11 @@
 import 'dart:io';
-import 'dart:io' show Platform;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'camera_page.dart';
+// KEEPING YOUR ORIGINAL IMPORTS
 import 'home_page.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -18,12 +17,15 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage>
     with SingleTickerProviderStateMixin {
+  // ---------------------------------------------------------------------------
+  // LOGIC SECTION (KEPT EXACTLY THE SAME)
+  // ---------------------------------------------------------------------------
   final nameController = TextEditingController();
   final idController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
 
-  File? _localPhoto; // UI ONLY
+  File? _localPhoto;
   double? latitude;
   double? longitude;
 
@@ -31,78 +33,63 @@ class _RegisterPageState extends State<RegisterPage>
 
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
-  late Animation<Offset> _slideAnim;
 
   @override
   void initState() {
     super.initState();
-
-    _controller =
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 800));
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-
     _controller.forward();
   }
 
   // 📸 PHOTO PICK
   Future<void> _pickPhoto() async {
-  if (!Platform.isWindows) {
-    final XFile? photo =
-        await ImagePicker().pickImage(source: ImageSource.camera);
-    if (photo != null) {
-      setState(() => _localPhoto = File(photo.path));
-    }
-    return;
-  }
-
-  final htmlPath =
-      '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
-
-  await launchUrl(
-    Uri.file(htmlPath),
-    mode: LaunchMode.externalApplication,
-  );
-
-  final downloadsDir =
-      Directory('${Platform.environment['USERPROFILE']}\\Downloads');
-
-  final startTime = DateTime.now();
-
-  // 🔁 POLL for up to 15 seconds
-  while (DateTime.now().difference(startTime).inSeconds < 15) {
-    final files = downloadsDir
-        .listSync()
-        .whereType<File>()
-        .where((f) =>
-            f.path.endsWith('captured_photo.png') &&
-            f.lastModifiedSync().isAfter(startTime))
-        .toList();
-
-    if (files.isNotEmpty) {
-      setState(() => _localPhoto = files.first);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("📸 Photo captured successfully")),
-      );
+    if (!Platform.isWindows) {
+      final XFile? photo =
+          await ImagePicker().pickImage(source: ImageSource.camera);
+      if (photo != null) {
+        setState(() => _localPhoto = File(photo.path));
+      }
       return;
     }
 
-    await Future.delayed(const Duration(milliseconds: 500));
+    final htmlPath =
+        '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
+
+    await launchUrl(
+      Uri.file(htmlPath),
+      mode: LaunchMode.externalApplication,
+    );
+
+    final downloadsDir =
+        Directory('${Platform.environment['USERPROFILE']}\\Downloads');
+
+    final startTime = DateTime.now();
+
+    while (DateTime.now().difference(startTime).inSeconds < 15) {
+      final files = downloadsDir
+          .listSync()
+          .whereType<File>()
+          .where((f) =>
+              f.path.endsWith('captured_photo.png') &&
+              f.lastModifiedSync().isAfter(startTime))
+          .toList();
+
+      if (files.isNotEmpty) {
+        setState(() => _localPhoto = files.first);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("📸 Photo captured successfully")),
+        );
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("❌ Photo capture timed out")),
+    );
   }
-
-  // ❌ Timeout
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text("❌ Photo capture timed out")),
-  );
-}
-
-
 
   // 📍 LOCATION
   Future<void> _getCurrentLocation() async {
@@ -152,7 +139,7 @@ class _RegisterPageState extends State<RegisterPage>
     await FirebaseFirestore.instance.collection('users').add({
       'name': nameController.text.trim(),
       'username': idController.text.trim(),
-      'password': passwordController.text.trim(), // demo only
+      'password': passwordController.text.trim(),
       'latitude': latitude,
       'longitude': longitude,
       'createdAt': FieldValue.serverTimestamp(),
@@ -181,90 +168,220 @@ class _RegisterPageState extends State<RegisterPage>
     super.dispose();
   }
 
-  InputDecoration _input(String label, IconData icon) => InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        filled: true,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-      );
+  // ---------------------------------------------------------------------------
+  // UI SECTION (REDESIGNED)
+  // ---------------------------------------------------------------------------
+
+  // A custom input decoration that matches the clean white/border look in the image
+  InputDecoration _modernInput(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.grey),
+      prefixIcon: Icon(icon, color: const Color(0xFF6A8A73)), // Sage Green Icon
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Color(0xFF6A8A73), width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Colors.redAccent),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    // 1. The Background Color (Dark Top)
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
+      backgroundColor: const Color(0xFF101010), // Dark charcoal/black
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: FadeTransition(
+        opacity: _fadeAnim,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 2. The Header Text (Top Section)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
               child: Column(
-                children: [
-                  TextFormField(controller: nameController, decoration: _input("Name", Icons.person)),
-                  const SizedBox(height: 12),
-                  TextFormField(controller: idController, decoration: _input("Username", Icons.badge)),
-                  const SizedBox(height: 12),
-                  TextFormField(controller: passwordController, obscureText: true, decoration: _input("Password", Icons.lock)),
-                  const SizedBox(height: 12),
-                  TextFormField(controller: confirmPasswordController, obscureText: true, decoration: _input("Confirm Password", Icons.lock_outline)),
-                  const SizedBox(height: 12),
-
-                  TextFormField(
-                    readOnly: true,
-                    onTap: _pickPhoto,
-                    decoration: _input("Add a photo", Icons.camera_alt),
-                  ),
-                  if (_localPhoto != null) ...[
-  const SizedBox(height: 12),
-  Image.file(
-    _localPhoto!,
-    height: 120,
-    fit: BoxFit.cover,
-  ),
-],
-
-
-                  const SizedBox(height: 12),
-
-                  TextFormField(
-                    readOnly: true,
-                    onTap: _getCurrentLocation,
-                    decoration: _input(
-                      _fetchingLocation ? "Fetching location..." : "Get location",
-                      Icons.location_on,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    "Go ahead and set up\nyour account",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      height: 1.2,
                     ),
                   ),
-
-                  const SizedBox(height: 20),
-
-                  ElevatedButton(
-  onPressed: () {
-    if (latitude == null || longitude == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("📍 Please fetch location first")),
-      );
-      return;
-    }
-
-    if (passwordController.text != confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Passwords do not match")),
-      );
-      return;
-    }
-
-    _registerUser();
-  },
-  child: const Text("Register"),
-)
-
+                  SizedBox(height: 10),
+                  Text(
+                    "Sign in-up to enjoy the best managing experience",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 14,
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
+
+            // 3. The White Bottom Container (Expanded)
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      // "Tab" indicator visual (just for looks to match image style)
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 24),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+
+                      // FORM FIELDS
+                      TextFormField(
+                        controller: nameController,
+                        decoration: _modernInput("Full Name", Icons.person_outline),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: idController,
+                        decoration: _modernInput("Username", Icons.badge_outlined),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: _modernInput("Password", Icons.lock_outline),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: confirmPasswordController,
+                        obscureText: true,
+                        decoration: _modernInput("Confirm Password", Icons.lock_reset),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // PHOTO PICKER (Styled as input)
+                      GestureDetector(
+                        onTap: _pickPhoto,
+                        child: AbsorbPointer(
+                          child: TextFormField(
+                            decoration: _modernInput("Add a photo", Icons.camera_alt_outlined),
+                          ),
+                        ),
+                      ),
+                      
+                      // PREVIEW IMAGE
+                      if (_localPhoto != null) ...[
+                        const SizedBox(height: 16),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.file(
+                            _localPhoto!,
+                            height: 150,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 16),
+
+                      // LOCATION PICKER (Styled as input)
+                      GestureDetector(
+                        onTap: _getCurrentLocation,
+                        child: AbsorbPointer(
+                          child: TextFormField(
+                            decoration: _modernInput(
+                              _fetchingLocation
+                                  ? "Fetching location..."
+                                  : (latitude != null ? "Location Set" : "Get location"),
+                              Icons.location_on_outlined,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // 4. The "Sage Green" Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (latitude == null || longitude == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("📍 Please fetch location first")),
+                              );
+                              return;
+                            }
+
+                            if (passwordController.text != confirmPasswordController.text) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Passwords do not match")),
+                              );
+                              return;
+                            }
+
+                            _registerUser();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6A8A73), // The Sage Green
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                          child: const Text(
+                            "Register",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

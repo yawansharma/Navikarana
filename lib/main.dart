@@ -7,12 +7,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart'; 
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart'; 
 
 import 'firebase_options.dart';
 import 'home_page.dart';
 import 'register_page.dart';
-
-// ✅ CORRECTED IMPORT: Matches your file name "admin_login.dart"
 import 'admin_login.dart'; 
 
 void main() async {
@@ -47,6 +46,9 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   final passwordController = TextEditingController();
   File? _loginPhoto;
 
+  String _currentChallenge = "Smile"; // Default
+  final List<String> _challenges = ["Smile", "Wink Left Eye", "Wink Right Eye", "Open Mouth"];
+
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -54,6 +56,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   @override
   void initState() {
     super.initState();
+    _refreshChallenge(); // Pick a random challenge on startup
     _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _slideAnim = Tween<Offset>(
@@ -61,6 +64,12 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _controller.forward();
+  }
+
+  void _refreshChallenge() {
+    setState(() {
+      _currentChallenge = _challenges[Random().nextInt(_challenges.length)];
+    });
   }
 
   @override
@@ -72,35 +81,157 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   }
 
   Future<void> _pickPhoto() async {
-    if (!Platform.isWindows) {
-      final XFile? photo = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 50);
-      if (photo != null) setState(() => _loginPhoto = File(photo.path));
+    // 📸 WINDOWS FALLBACK (Skip ML Kit on Windows)
+    if (Platform.isWindows) {
+      final htmlPath = '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
+      await launchUrl(Uri.file(htmlPath), mode: LaunchMode.externalApplication);
+      
+      final downloadsDir = Directory('${Platform.environment['USERPROFILE']}\\Downloads');
+      final startTime = DateTime.now();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Waiting for photo capture...")));
+
+      while (DateTime.now().difference(startTime).inSeconds < 15) {
+        final files = downloadsDir.listSync().whereType<File>().where((f) =>
+            f.path.endsWith('captured_photo.png') &&
+            f.lastModifiedSync().isAfter(startTime)).toList();
+
+        if (files.isNotEmpty) {
+          setState(() => _loginPhoto = files.first);
+          return;
+        }
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
       return;
     }
 
-    // Windows Camera Logic
-    final htmlPath = '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
-    await launchUrl(Uri.file(htmlPath), mode: LaunchMode.externalApplication);
-    
-    final downloadsDir = Directory('${Platform.environment['USERPROFILE']}\\Downloads');
-    final startTime = DateTime.now();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Waiting for photo capture...")));
+    // 📱 MOBILE LOGIC: CAPTURE & VERIFY LIVENESS
+    final XFile? photo = await ImagePicker().pickImage(
+      source: ImageSource.camera, 
+      imageQuality: 50,
+      preferredCameraDevice: CameraDevice.front, // Force front camera for selfie
+    );
 
-    while (DateTime.now().difference(startTime).inSeconds < 15) {
-      final files = downloadsDir.listSync().whereType<File>().where((f) =>
-          f.path.endsWith('captured_photo.png') &&
-          f.lastModifiedSync().isAfter(startTime)).toList();
-
-      if (files.isNotEmpty) {
-        setState(() => _loginPhoto = files.first);
-        return;
+    if (photo != null) {
+      File capturedFile = File(photo.path);
+      
+      // 🛡️ RUN LIVENESS CHECK IMMEDIATELY
+      bool isLive = await _verifyLiveness(capturedFile);
+      
+      if (isLive) {
+        setState(() => _loginPhoto = capturedFile);
+      } else {
+        if (!mounted) return;
+        _showSecurityAlert("Liveness Check Failed", "You failed the '$_currentChallenge' challenge. Ensure other features are neutral. Please try again.");
+        _refreshChallenge(); // Give a new challenge
+        setState(() => _loginPhoto = null);
       }
-      await Future.delayed(const Duration(milliseconds: 500));
     }
   }
 
+  // 🛡️ FUNCTION: VERIFY FACE EXPRESSION EXCLUSIVELY
+  Future<bool> _verifyLiveness(File photo) async {
+    final inputImage = InputImage.fromFile(photo);
+    final options = FaceDetectorOptions(
+      enableClassification: true, // Needed for eyes/smile
+      enableLandmarks: true,
+      minFaceSize: 0.15,
+    );
+    final faceDetector = FaceDetector(options: options);
+
+    try {
+      final faces = await faceDetector.processImage(inputImage);
+      if (faces.isEmpty) {
+        _showSecurityAlert("No Face Detected", "Please ensure your face is clearly visible.");
+        return false;
+      }
+
+      final face = faces.first; // Check the primary face
+
+      // STRICT THRESHOLDS
+      const double smileActiveThreshold = 0.7; // High probability for smile
+      const double smileNeutralThreshold = 0.25; // Low probability for neutral
+      const double eyeOpenThreshold = 0.6; // Eye is open
+      const double eyeClosedThreshold = 0.15; // Eye is closed
+
+      double smileProb = face.smilingProbability ?? 0;
+      double leftEyeProb = face.leftEyeOpenProbability ?? 1;
+      double rightEyeProb = face.rightEyeOpenProbability ?? 1;
+
+      bool passed = false;
+
+      switch (_currentChallenge) {
+        case "Smile":
+          // Exclusively Smile: Smile is high, but both eyes must be open (normal)
+          if (smileProb > smileActiveThreshold && 
+              leftEyeProb > eyeOpenThreshold && 
+              rightEyeProb > eyeOpenThreshold) {
+            passed = true;
+          }
+          break;
+
+        case "Wink Left Eye":
+          // Exclusively Wink Left: Left eye is closed, Right eye is open, and NOT smiling
+          if (leftEyeProb < eyeClosedThreshold && 
+              rightEyeProb > eyeOpenThreshold && 
+              smileProb < smileNeutralThreshold) {
+            passed = true;
+          }
+          break;
+
+        case "Wink Right Eye":
+          // Exclusively Wink Right: Right eye is closed, Left eye is open, and NOT smiling
+          if (rightEyeProb < eyeClosedThreshold && 
+              leftEyeProb > eyeOpenThreshold && 
+              smileProb < smileNeutralThreshold) {
+            passed = true;
+          }
+          break;
+
+        case "Open Mouth":
+          final leftM = face.landmarks[FaceLandmarkType.leftMouth];
+          final rightM = face.landmarks[FaceLandmarkType.rightMouth];
+          final bottomM = face.landmarks[FaceLandmarkType.bottomMouth];
+
+          // 🚨 VERY IMPORTANT: Check for null landmarks first
+          if (leftM == null || rightM == null || bottomM == null) {
+            passed = false;
+            break;
+          }
+
+          double width = (leftM.position.x - rightM.position.x).abs().toDouble();
+          double height = (bottomM.position.y - leftM.position.y).abs().toDouble();
+
+          if (height > (width * 0.35) &&
+              leftEyeProb > eyeOpenThreshold &&
+              rightEyeProb > eyeOpenThreshold &&
+              smileProb < 0.4) {
+            passed = true;
+          }
+          break;
+      }
+
+      faceDetector.close();
+      return passed;
+
+    } catch (e) {
+      faceDetector.close();
+      return false; // Fail safe
+    }
+  }
+
+  void _showSecurityAlert(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title, style: const TextStyle(color: Colors.red)),
+        content: Text(message),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------------------
-  // 📍 UPDATED LOGIN LOGIC: REAL-TIME LOCATION CHECK
+  // 📍 LOGIN LOGIC WITH BETTER LOADING FEEDBACK
   // ---------------------------------------------------------------------------
   Future<void> _login() async {
     if (_loginPhoto == null) {
@@ -108,15 +239,34 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       return;
     }
 
-    // 1. SHOW LOADING
+    // ✅ SMART STATUS INITIALIZATION
+    ValueNotifier<String> statusText = ValueNotifier("Authenticating...");
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73))),
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          content: ValueListenableBuilder<String>(
+            valueListenable: statusText,
+            builder: (context, value, child) {
+              return Row(
+                children: [
+                  const CircularProgressIndicator(color: Color(0xFF6A8A73)),
+                  const SizedBox(width: 20),
+                  Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold))),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
     );
 
     try {
-      // 2. GET CREDENTIALS
+      // 1. GET CREDENTIALS
       final query = await FirebaseFirestore.instance
           .collection('users')
           .where('username', isEqualTo: usernameController.text.trim())
@@ -124,7 +274,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
           .get();
 
       if (query.docs.isEmpty) {
-        if (mounted) Navigator.of(context).pop(); // Dismiss Loading
+        if (mounted) Navigator.of(context).pop(); 
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid credentials")));
         return;
       }
@@ -132,17 +282,16 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       final doc = query.docs.first;
       final data = doc.data();
 
-      // 3. GET REAL-TIME DEVICE LOCATION
-      // We do this *now* to check against the boundary
+      // ✅ STATUS: Location
+      statusText.value = "Verifying Location...";
+
       Position? currentPosition;
       try {
         LocationPermission permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
-        }
+        if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
         
         if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
-             currentPosition = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+             currentPosition = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
         } else {
              throw "Location permission denied";
         }
@@ -152,12 +301,18 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         return;
       }
 
+      if (Platform.isAndroid && currentPosition.isMocked) {
+        if (mounted) Navigator.of(context).pop();
+        _showSecurityAlert("Security Violation", "Fake GPS Detected! Please disable mock location apps and try again.");
+        return; 
+      }
+
       final double realTimeLat = currentPosition.latitude;
       final double realTimeLng = currentPosition.longitude;
 
-      // 4. CHECK BOUNDARY
-      // If Admin hasn't set a boundary yet, we might fallback to the user's initial registration location
-      // or block them. Here we block them as per previous logic, but you could change this.
+      // ✅ STATUS: Geofence
+      statusText.value = "Checking Geofence...";
+
       if (data['boundary'] == null) {
         if (mounted) Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access denied: Boundary not set by Admin")));
@@ -167,41 +322,40 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       final boundaryLat = data['boundary']['lat'];
       final boundaryLng = data['boundary']['lng'];
 
-      // Calculate distance between REAL-TIME location and BOUNDARY
       final distance = _calculateDistanceMeters(realTimeLat, realTimeLng, boundaryLat, boundaryLng);
 
-      // Prepare Image
+      // ✅ STATUS: Biometrics
+      statusText.value = "Analyzing Biometrics...";
+
       final bytes = await _loginPhoto!.readAsBytes();
       final String base64Image = base64Encode(bytes);
 
-      // 🔴 FAIL: GEOFENCE MISMATCH
       if (distance > 20) {
-        // Log the FAILED attempt with the REAL-TIME location
         await FirebaseFirestore.instance.collection('attendance_logs').add({
           'userId': doc.id,
           'name': data['name'],
           'username': data['username'],
           'timestamp': FieldValue.serverTimestamp(),
           'photoBase64': base64Image,
-          'location': {'lat': realTimeLat, 'lng': realTimeLng}, // Log where they actually are
+          'location': {'lat': realTimeLat, 'lng': realTimeLng},
           'status': 'Location Mismatch',
         });
 
         if (mounted) {
-          Navigator.of(context).pop(); // Dismiss Loading
+          Navigator.of(context).pop(); 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Access Denied: You are ${distance.toStringAsFixed(1)}m away from your workplace."),
+              content: Text("Access Denied: You are ${distance.toStringAsFixed(1)}m away."),
               backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
             ),
           );
         }
         return;
       }
 
-      // ✅ SUCCESS: PRESENT
-      // 1. Log Attendance
+      // ✅ STATUS: Finalizing
+      statusText.value = "Finalizing Success...";
+
       await FirebaseFirestore.instance.collection('attendance_logs').add({
         'userId': doc.id,
         'name': data['name'],
@@ -212,8 +366,6 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         'status': 'Present',
       });
 
-      // 2. UPDATE USER LOCATION IN DB
-      // This ensures the "latest" location is saved in the user profile too
       await FirebaseFirestore.instance.collection('users').doc(doc.id).update({
         'latitude': realTimeLat,
         'longitude': realTimeLng,
@@ -221,15 +373,15 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       });
 
       if(!mounted) return;
-      Navigator.of(context).pop(); // Dismiss Loading
+      Navigator.of(context).pop(); 
       
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => HomePage(
             name: data['name'],
-            latitude: realTimeLat, // Pass real-time lat
-            longitude: realTimeLng, // Pass real-time lng
+            latitude: realTimeLat,
+            longitude: realTimeLng,
             photo: _loginPhoto,
           ),
         ),
@@ -287,7 +439,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 30),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: const [
@@ -312,8 +464,26 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 30), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+                          Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
                           
+                          if (!Platform.isWindows && _loginPhoto == null) 
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.only(bottom: 20),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6A8A73).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFF6A8A73)),
+                              ),
+                              child: Column(
+                                children: [
+                                  const Text("SECURITY CHALLENGE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF6A8A73))),
+                                  const SizedBox(height: 4),
+                                  Text("Please: $_currentChallenge", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.black87)),
+                                ],
+                              ),
+                            ),
+
                           TextFormField(controller: usernameController, decoration: _modernInput("Username", Icons.person_outline)),
                           const SizedBox(height: 16),
                           TextFormField(controller: passwordController, obscureText: true, decoration: _modernInput("Password", Icons.lock_outline)),
@@ -333,10 +503,10 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                   ? ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.file(_loginPhoto!, fit: BoxFit.cover, width: double.infinity))
                                   : Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
-                                      children: const [
-                                        Icon(Icons.camera_alt_outlined, size: 30, color: Colors.grey),
-                                        SizedBox(height: 8),
-                                        Text("Tap to take Selfie (Required)", style: TextStyle(color: Colors.grey)),
+                                      children: [
+                                        const Icon(Icons.camera_alt_outlined, size: 30, color: Colors.grey),
+                                        const SizedBox(height: 8),
+                                        Text(Platform.isWindows ? "Capture Photo" : "Take Selfie ($_currentChallenge)", style: const TextStyle(color: Colors.grey)),
                                       ],
                                     ),
                             ),

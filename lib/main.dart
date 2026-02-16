@@ -6,11 +6,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart'; 
 
 import 'firebase_options.dart';
 import 'home_page.dart';
 import 'register_page.dart';
-import 'admin_login.dart';
+
+// ✅ CORRECTED IMPORT: Matches your file name "admin_login.dart"
+import 'admin_login.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,6 +78,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       return;
     }
 
+    // Windows Camera Logic
     final htmlPath = '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
     await launchUrl(Uri.file(htmlPath), mode: LaunchMode.externalApplication);
     
@@ -96,7 +100,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   }
 
   // ---------------------------------------------------------------------------
-  // 🔐 NEW: LOGIN LOGIC WITH FAILED ATTEMPT LOGGING
+  // 📍 UPDATED LOGIN LOGIC: REAL-TIME LOCATION CHECK
   // ---------------------------------------------------------------------------
   Future<void> _login() async {
     if (_loginPhoto == null) {
@@ -104,6 +108,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       return;
     }
 
+    // 1. SHOW LOADING
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -111,16 +116,15 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     );
 
     try {
+      // 2. GET CREDENTIALS
       final query = await FirebaseFirestore.instance
           .collection('users')
           .where('username', isEqualTo: usernameController.text.trim())
           .where('password', isEqualTo: passwordController.text.trim())
           .get();
 
-      if (!mounted) return;
-      Navigator.of(context).pop(); // Dismiss Loading
-
       if (query.docs.isEmpty) {
+        if (mounted) Navigator.of(context).pop(); // Dismiss Loading
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid credentials")));
         return;
       }
@@ -128,23 +132,43 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       final doc = query.docs.first;
       final data = doc.data();
 
-      // Boundary Check
-      if (data['boundary'] == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access denied: Boundary not set")));
+      // 3. GET REAL-TIME DEVICE LOCATION
+      // We do this *now* to check against the boundary
+      Position? currentPosition;
+      try {
+        LocationPermission permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        
+        if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+             currentPosition = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        } else {
+             throw "Location permission denied";
+        }
+      } catch (e) {
+        if (mounted) Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Location Error: $e")));
         return;
       }
 
-      final userLat = data['latitude'];
-      final userLng = data['longitude'];
+      final double realTimeLat = currentPosition.latitude;
+      final double realTimeLng = currentPosition.longitude;
+
+      // 4. CHECK BOUNDARY
+      // If Admin hasn't set a boundary yet, we might fallback to the user's initial registration location
+      // or block them. Here we block them as per previous logic, but you could change this.
+      if (data['boundary'] == null) {
+        if (mounted) Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access denied: Boundary not set by Admin")));
+        return;
+      }
+
       final boundaryLat = data['boundary']['lat'];
       final boundaryLng = data['boundary']['lng'];
 
-      if (userLat == null || userLng == null) {
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Location data missing")));
-         return;
-      }
-
-      final distance = _calculateDistanceMeters(userLat, userLng, boundaryLat, boundaryLng);
+      // Calculate distance between REAL-TIME location and BOUNDARY
+      final distance = _calculateDistanceMeters(realTimeLat, realTimeLng, boundaryLat, boundaryLng);
 
       // Prepare Image
       final bytes = await _loginPhoto!.readAsBytes();
@@ -152,54 +176,68 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
 
       // 🔴 FAIL: GEOFENCE MISMATCH
       if (distance > 20) {
-        // Log the FAILED attempt so Admin can see it
+        // Log the FAILED attempt with the REAL-TIME location
         await FirebaseFirestore.instance.collection('attendance_logs').add({
           'userId': doc.id,
           'name': data['name'],
           'username': data['username'],
           'timestamp': FieldValue.serverTimestamp(),
           'photoBase64': base64Image,
-          'location': {'lat': userLat, 'lng': userLng},
-          'status': 'Location Mismatch', // ⚠️ Special Status
+          'location': {'lat': realTimeLat, 'lng': realTimeLng}, // Log where they actually are
+          'status': 'Location Mismatch',
         });
 
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Access Denied: You are ${distance.toStringAsFixed(1)}m away. Attempt logged."),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          Navigator.of(context).pop(); // Dismiss Loading
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Access Denied: You are ${distance.toStringAsFixed(1)}m away from your workplace."),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
         return;
       }
 
       // ✅ SUCCESS: PRESENT
+      // 1. Log Attendance
       await FirebaseFirestore.instance.collection('attendance_logs').add({
         'userId': doc.id,
         'name': data['name'],
         'username': data['username'],
         'timestamp': FieldValue.serverTimestamp(),
         'photoBase64': base64Image,
-        'location': {'lat': userLat, 'lng': userLng},
-        'status': 'Present', // ✅ Success Status
+        'location': {'lat': realTimeLat, 'lng': realTimeLng},
+        'status': 'Present',
+      });
+
+      // 2. UPDATE USER LOCATION IN DB
+      // This ensures the "latest" location is saved in the user profile too
+      await FirebaseFirestore.instance.collection('users').doc(doc.id).update({
+        'latitude': realTimeLat,
+        'longitude': realTimeLng,
+        'lastLogin': FieldValue.serverTimestamp(),
       });
 
       if(!mounted) return;
+      Navigator.of(context).pop(); // Dismiss Loading
+      
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => HomePage(
             name: data['name'],
-            latitude: userLat,
-            longitude: userLng,
+            latitude: realTimeLat, // Pass real-time lat
+            longitude: realTimeLng, // Pass real-time lng
             photo: _loginPhoto,
           ),
         ),
       );
 
     } catch (e) {
-      if (Navigator.canPop(context)) Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 

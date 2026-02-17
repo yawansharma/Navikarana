@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 import 'home_page.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -23,6 +24,10 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
   double? latitude;
   double? longitude;
   bool _fetchingLocation = false;
+  bool _registeringFace = false;
+
+  // 🔥 CHANGE IF YOUR IP CHANGES
+  final String backendUrl = "http://172.20.10.3:5000/register-face";
 
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
@@ -44,36 +49,67 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
 
     final htmlPath = '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
     await launchUrl(Uri.file(htmlPath), mode: LaunchMode.externalApplication);
-    final downloadsDir = Directory('${Platform.environment['USERPROFILE']}\\Downloads');
-    final startTime = DateTime.now();
-
-    while (DateTime.now().difference(startTime).inSeconds < 15) {
-      final files = downloadsDir.listSync().whereType<File>().where((f) => f.path.endsWith('captured_photo.png') && f.lastModifiedSync().isAfter(startTime)).toList();
-      if (files.isNotEmpty) {
-        setState(() => _localPhoto = files.first);
-        return;
-      }
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
   }
 
   Future<void> _getCurrentLocation() async {
     setState(() => _fetchingLocation = true);
     bool enabled = await Geolocator.isLocationServiceEnabled();
-    if (!enabled) { setState(() => _fetchingLocation = false); return; }
+    if (!enabled) { 
+      await Geolocator.openLocationSettings();
+      setState(() => _fetchingLocation = false); 
+      return; 
+    }
+
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) { setState(() => _fetchingLocation = false); return; }
+
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) { 
+      setState(() => _fetchingLocation = false); 
+      return; 
+    }
+
     final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-    setState(() { latitude = pos.latitude; longitude = pos.longitude; _fetchingLocation = false; });
+    setState(() { 
+      latitude = pos.latitude; 
+      longitude = pos.longitude; 
+      _fetchingLocation = false; 
+    });
+  }
+
+  // 🔥 SEND FACE TO BACKEND
+  Future<bool> _registerFace() async {
+    if (_localPhoto == null) return false;
+
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse(backendUrl));
+      request.fields['username'] = idController.text.trim();
+
+      request.files.add(
+        await http.MultipartFile.fromPath('image', _localPhoto!.path),
+      );
+
+      var response = await request.send();
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Face registration error: $e");
+      return false;
+    }
   }
 
   Future<void> _registerUser() async {
-    final existingUser = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: idController.text.trim()).get();
+    final existingUser = await FirebaseFirestore.instance
+        .collection('users')
+        .where('username', isEqualTo: idController.text.trim())
+        .get();
+
     if (existingUser.docs.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Username already exists")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Username already exists")),
+      );
       return;
     }
+
     await FirebaseFirestore.instance.collection('users').add({
       'name': nameController.text.trim(),
       'username': idController.text.trim(),
@@ -82,7 +118,18 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
       'longitude': longitude,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(name: nameController.text.trim(), latitude: latitude!, longitude: longitude!, photo: _localPhoto)));
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HomePage(
+          name: nameController.text.trim(),
+          latitude: latitude!,
+          longitude: longitude!,
+          photo: _localPhoto,
+        ),
+      ),
+    );
   }
 
   @override
@@ -95,7 +142,6 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
     super.dispose();
   }
 
-  // ✅ THEME CONSISTENCY: Same Input Style as Login Page
   InputDecoration _modernInput(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
@@ -119,7 +165,17 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(padding: const EdgeInsets.fromLTRB(24, 10, 24, 30), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [Text("Go ahead and set up\nyour account", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, height: 1.2)), SizedBox(height: 10), Text("Sign in-up to enjoy the best managing experience", style: TextStyle(color: Colors.grey, fontSize: 14))])),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text("Go ahead and set up\nyour account", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, height: 1.2)),
+                  SizedBox(height: 10),
+                  Text("Sign in-up to enjoy the best managing experience", style: TextStyle(color: Colors.grey, fontSize: 14))
+                ]
+              )
+            ),
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -129,20 +185,104 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                   child: Column(
                     children: [
                       Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+
                       TextFormField(controller: nameController, decoration: _modernInput("Full Name", Icons.person_outline)),
                       const SizedBox(height: 16),
+
                       TextFormField(controller: idController, decoration: _modernInput("Username", Icons.badge_outlined)),
                       const SizedBox(height: 16),
+
                       TextFormField(controller: passwordController, obscureText: true, decoration: _modernInput("Password", Icons.lock_outline)),
                       const SizedBox(height: 16),
+
                       TextFormField(controller: confirmPasswordController, obscureText: true, decoration: _modernInput("Confirm Password", Icons.lock_reset)),
                       const SizedBox(height: 16),
-                      GestureDetector(onTap: _pickPhoto, child: AbsorbPointer(child: TextFormField(decoration: _modernInput("Add a photo", Icons.camera_alt_outlined)))),
-                      if (_localPhoto != null) ...[const SizedBox(height: 16), ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_localPhoto!, height: 150, width: double.infinity, fit: BoxFit.cover))],
+
+                      GestureDetector(
+                        onTap: _pickPhoto,
+                        child: AbsorbPointer(
+                          child: TextFormField(decoration: _modernInput("Add a photo", Icons.camera_alt_outlined))
+                        )
+                      ),
+
+                      if (_localPhoto != null) ...[
+                        const SizedBox(height: 16),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.file(_localPhoto!, height: 150, width: double.infinity, fit: BoxFit.cover)
+                        )
+                      ],
+
                       const SizedBox(height: 16),
-                      GestureDetector(onTap: _getCurrentLocation, child: AbsorbPointer(child: TextFormField(decoration: _modernInput(_fetchingLocation ? "Fetching location..." : (latitude != null ? "Location Set" : "Get location"), Icons.location_on_outlined)))),
+
+                      GestureDetector(
+                        onTap: _getCurrentLocation,
+                        child: AbsorbPointer(
+                          child: TextFormField(
+                            decoration: _modernInput(
+                              _fetchingLocation
+                                  ? "Fetching location..."
+                                  : (latitude != null ? "Location Set" : "Get location"),
+                              Icons.location_on_outlined
+                            )
+                          )
+                        )
+                      ),
+
                       const SizedBox(height: 32),
-                      SizedBox(width: double.infinity, height: 55, child: ElevatedButton(onPressed: () { if (latitude == null || longitude == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("📍 Please fetch location first"))); return; } if (passwordController.text != confirmPasswordController.text) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passwords do not match"))); return; } _registerUser(); }, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), child: const Text("Register", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)))),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton(
+                          onPressed: _registeringFace ? null : () async {
+
+                            if (_localPhoto == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("📸 Please add photo first"))
+                              );
+                              return;
+                            }
+
+                            if (latitude == null || longitude == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("📍 Please fetch location first"))
+                              );
+                              return;
+                            }
+
+                            if (passwordController.text != confirmPasswordController.text) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Passwords do not match"))
+                              );
+                              return;
+                            }
+
+                            setState(() => _registeringFace = true);
+
+                            bool faceOk = await _registerFace();
+
+                            if (!faceOk) {
+                              setState(() => _registeringFace = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("❌ Face detection failed"))
+                              );
+                              return;
+                            }
+
+                            await _registerUser();
+                            setState(() => _registeringFace = false);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6A8A73),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))
+                          ),
+                          child: _registeringFace
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : const Text("Register", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white))
+                        )
+                      ),
+
                       const SizedBox(height: 20),
                     ],
                   ),

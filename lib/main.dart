@@ -6,13 +6,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:geolocator/geolocator.dart'; 
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart'; 
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 
 import 'firebase_options.dart';
 import 'home_page.dart';
 import 'register_page.dart';
-import 'admin_login.dart'; 
+import 'admin_login.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,13 +41,14 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage>
+    with SingleTickerProviderStateMixin {
   final usernameController = TextEditingController();
   final passwordController = TextEditingController();
   File? _loginPhoto;
 
-  String _currentChallenge = "Smile"; // Default
-  final List<String> _challenges = ["Smile", "Wink Left Eye", "Wink Right Eye", "Open Mouth"];
+  final String loginBackendUrl =
+      "http://172.20.10.3:5000/login-face"; // change if IP changes
 
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
@@ -56,20 +57,14 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    _refreshChallenge(); // Pick a random challenge on startup
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _controller =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.1),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _controller.forward();
-  }
-
-  void _refreshChallenge() {
-    setState(() {
-      _currentChallenge = _challenges[Random().nextInt(_challenges.length)];
-    });
   }
 
   @override
@@ -80,20 +75,79 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     super.dispose();
   }
 
+  Future<String?> _verifyFaceWithBackend() async {
+    if (_loginPhoto == null) {
+      print("❌ No login photo available");
+      return null;
+    }
+
+    try {
+      print("🔵 Preparing request to backend...");
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(loginBackendUrl),
+      );
+
+      // ✅ Send username to backend
+      request.fields['username'] = usernameController.text.trim();
+
+      // ✅ Send image file
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'image',
+          _loginPhoto!.path,
+        ),
+      );
+
+      print("📤 Sending image + username to backend...");
+      var response = await request.send();
+
+      print("📥 Backend responded with status: ${response.statusCode}");
+
+      var responseData = await response.stream.bytesToString();
+      print("📦 Backend raw response: $responseData");
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(responseData);
+
+        if (decoded["verified"] == true) {
+          print("✅ Face verified as: ${decoded["username"]}");
+          return decoded["username"];
+        } else {
+          print("❌ Face not verified");
+          return null;
+        }
+      } else {
+        print("❌ Backend error status");
+        return null;
+      }
+    } catch (e) {
+      print("🚨 Face login exception: $e");
+      return null;
+    }
+  }
+
+
   Future<void> _pickPhoto() async {
-    // 📸 WINDOWS FALLBACK (Skip ML Kit on Windows)
     if (Platform.isWindows) {
-      final htmlPath = '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
-      await launchUrl(Uri.file(htmlPath), mode: LaunchMode.externalApplication);
-      
-      final downloadsDir = Directory('${Platform.environment['USERPROFILE']}\\Downloads');
+      final htmlPath =
+          '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
+      await launchUrl(Uri.file(htmlPath),
+          mode: LaunchMode.externalApplication);
+
+      final downloadsDir =
+          Directory('${Platform.environment['USERPROFILE']}\\Downloads');
       final startTime = DateTime.now();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Waiting for photo capture...")));
 
       while (DateTime.now().difference(startTime).inSeconds < 15) {
-        final files = downloadsDir.listSync().whereType<File>().where((f) =>
-            f.path.endsWith('captured_photo.png') &&
-            f.lastModifiedSync().isAfter(startTime)).toList();
+        final files = downloadsDir
+            .listSync()
+            .whereType<File>()
+            .where((f) =>
+                f.path.endsWith('captured_photo.png') &&
+                f.lastModifiedSync().isAfter(startTime))
+            .toList();
 
         if (files.isNotEmpty) {
           setState(() => _loginPhoto = files.first);
@@ -104,143 +158,26 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       return;
     }
 
-    // 📱 MOBILE LOGIC: CAPTURE & VERIFY LIVENESS
     final XFile? photo = await ImagePicker().pickImage(
-      source: ImageSource.camera, 
+      source: ImageSource.camera,
       imageQuality: 50,
-      preferredCameraDevice: CameraDevice.front, // Force front camera for selfie
+      preferredCameraDevice: CameraDevice.front,
     );
 
     if (photo != null) {
-      File capturedFile = File(photo.path);
-      
-      // 🛡️ RUN LIVENESS CHECK IMMEDIATELY
-      bool isLive = await _verifyLiveness(capturedFile);
-      
-      if (isLive) {
-        setState(() => _loginPhoto = capturedFile);
-      } else {
-        if (!mounted) return;
-        _showSecurityAlert("Liveness Check Failed", "You failed the '$_currentChallenge' challenge. Ensure other features are neutral. Please try again.");
-        _refreshChallenge(); // Give a new challenge
-        setState(() => _loginPhoto = null);
-      }
+      setState(() => _loginPhoto = File(photo.path));
     }
   }
 
-  // 🛡️ FUNCTION: VERIFY FACE EXPRESSION EXCLUSIVELY
-  Future<bool> _verifyLiveness(File photo) async {
-    final inputImage = InputImage.fromFile(photo);
-    final options = FaceDetectorOptions(
-      enableClassification: true, // Needed for eyes/smile
-      enableLandmarks: true,
-      minFaceSize: 0.15,
-    );
-    final faceDetector = FaceDetector(options: options);
-
-    try {
-      final faces = await faceDetector.processImage(inputImage);
-      if (faces.isEmpty) {
-        _showSecurityAlert("No Face Detected", "Please ensure your face is clearly visible.");
-        return false;
-      }
-
-      final face = faces.first; // Check the primary face
-
-      // STRICT THRESHOLDS
-      const double smileActiveThreshold = 0.7; // High probability for smile
-      const double smileNeutralThreshold = 0.25; // Low probability for neutral
-      const double eyeOpenThreshold = 0.6; // Eye is open
-      const double eyeClosedThreshold = 0.15; // Eye is closed
-
-      double smileProb = face.smilingProbability ?? 0;
-      double leftEyeProb = face.leftEyeOpenProbability ?? 1;
-      double rightEyeProb = face.rightEyeOpenProbability ?? 1;
-
-      bool passed = false;
-
-      switch (_currentChallenge) {
-        case "Smile":
-          // Exclusively Smile: Smile is high, but both eyes must be open (normal)
-          if (smileProb > smileActiveThreshold && 
-              leftEyeProb > eyeOpenThreshold && 
-              rightEyeProb > eyeOpenThreshold) {
-            passed = true;
-          }
-          break;
-
-        case "Wink Left Eye":
-          // Exclusively Wink Left: Left eye is closed, Right eye is open, and NOT smiling
-          if (leftEyeProb < eyeClosedThreshold && 
-              rightEyeProb > eyeOpenThreshold && 
-              smileProb < smileNeutralThreshold) {
-            passed = true;
-          }
-          break;
-
-        case "Wink Right Eye":
-          // Exclusively Wink Right: Right eye is closed, Left eye is open, and NOT smiling
-          if (rightEyeProb < eyeClosedThreshold && 
-              leftEyeProb > eyeOpenThreshold && 
-              smileProb < smileNeutralThreshold) {
-            passed = true;
-          }
-          break;
-
-        case "Open Mouth":
-          final leftM = face.landmarks[FaceLandmarkType.leftMouth];
-          final rightM = face.landmarks[FaceLandmarkType.rightMouth];
-          final bottomM = face.landmarks[FaceLandmarkType.bottomMouth];
-
-          // 🚨 VERY IMPORTANT: Check for null landmarks first
-          if (leftM == null || rightM == null || bottomM == null) {
-            passed = false;
-            break;
-          }
-
-          double width = (leftM.position.x - rightM.position.x).abs().toDouble();
-          double height = (bottomM.position.y - leftM.position.y).abs().toDouble();
-
-          if (height > (width * 0.35) &&
-              leftEyeProb > eyeOpenThreshold &&
-              rightEyeProb > eyeOpenThreshold &&
-              smileProb < 0.4) {
-            passed = true;
-          }
-          break;
-      }
-
-      faceDetector.close();
-      return passed;
-
-    } catch (e) {
-      faceDetector.close();
-      return false; // Fail safe
-    }
-  }
-
-  void _showSecurityAlert(String title, String message) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(title, style: const TextStyle(color: Colors.red)),
-        content: Text(message),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // 📍 LOGIN LOGIC WITH BETTER LOADING FEEDBACK
-  // ---------------------------------------------------------------------------
   Future<void> _login() async {
     if (_loginPhoto == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("📸 Selfie required to clock in")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("📸 Selfie required to clock in")));
       return;
     }
 
-    // ✅ SMART STATUS INITIALIZATION
-    ValueNotifier<String> statusText = ValueNotifier("Authenticating...");
+    ValueNotifier<String> statusText =
+        ValueNotifier("Authenticating...");
 
     showDialog(
       context: context,
@@ -248,15 +185,20 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       builder: (context) => WillPopScope(
         onWillPop: () async => false,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
           content: ValueListenableBuilder<String>(
             valueListenable: statusText,
             builder: (context, value, child) {
               return Row(
                 children: [
-                  const CircularProgressIndicator(color: Color(0xFF6A8A73)),
+                  const CircularProgressIndicator(
+                      color: Color(0xFF6A8A73)),
                   const SizedBox(width: 20),
-                  Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(
+                      child: Text(value,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold))),
                 ],
               );
             },
@@ -266,72 +208,120 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     );
 
     try {
-      // 1. GET CREDENTIALS
+      // -------------------------------
+      // STEP 1: Validate Credentials
+      // -------------------------------
+      final username = usernameController.text.trim();
+      final password = passwordController.text.trim();
+
       final query = await FirebaseFirestore.instance
           .collection('users')
-          .where('username', isEqualTo: usernameController.text.trim())
-          .where('password', isEqualTo: passwordController.text.trim())
+          .where('username', isEqualTo: username)
+          .where('password', isEqualTo: password)
           .get();
 
       if (query.docs.isEmpty) {
-        if (mounted) Navigator.of(context).pop(); 
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid credentials")));
+        if (mounted) Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Invalid credentials")));
         return;
       }
 
       final doc = query.docs.first;
       final data = doc.data();
 
-      // ✅ STATUS: Location
-      statusText.value = "Verifying Location...";
+      // -------------------------------
+      // STEP 2: FACE VERIFICATION FIRST
+      // -------------------------------
+      statusText.value = "Analyzing Biometrics...";
 
-      Position? currentPosition;
-      try {
-        LocationPermission permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-        
-        if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
-             currentPosition = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
-        } else {
-             throw "Location permission denied";
-        }
-      } catch (e) {
+      print("🔵 Sending face to backend...");
+
+      String? verifiedUsername =
+          await _verifyFaceWithBackend();
+
+      print("🟢 Backend returned: $verifiedUsername");
+
+      if (verifiedUsername == null ||
+          verifiedUsername != username) {
         if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Location Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Face not recognized")));
         return;
       }
 
+      // -------------------------------
+      // STEP 3: LOCATION CHECK
+      // -------------------------------
+      statusText.value = "Verifying Location...";
+
+      LocationPermission permission =
+          await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        if (mounted) Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Location permission required")));
+        return;
+      }
+
+      final currentPosition =
+          await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.best);
+
       if (Platform.isAndroid && currentPosition.isMocked) {
         if (mounted) Navigator.of(context).pop();
-        _showSecurityAlert("Security Violation", "Fake GPS Detected! Please disable mock location apps and try again.");
-        return; 
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Fake GPS detected")));
+        return;
       }
 
       final double realTimeLat = currentPosition.latitude;
       final double realTimeLng = currentPosition.longitude;
 
-      // ✅ STATUS: Geofence
+      // -------------------------------
+      // STEP 4: BOUNDARY CHECK (SAFE)
+      // -------------------------------
       statusText.value = "Checking Geofence...";
 
       if (data['boundary'] == null) {
         if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Access denied: Boundary not set by Admin")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Boundary not set by Admin")));
         return;
       }
 
-      final boundaryLat = data['boundary']['lat'];
-      final boundaryLng = data['boundary']['lng'];
+      final boundaryData =
+          Map<String, dynamic>.from(data['boundary']);
 
-      final distance = _calculateDistanceMeters(realTimeLat, realTimeLng, boundaryLat, boundaryLng);
+      final boundaryLat = boundaryData['lat'];
+      final boundaryLng = boundaryData['lng'];
 
-      // ✅ STATUS: Biometrics
-      statusText.value = "Analyzing Biometrics...";
+      if (boundaryLat == null || boundaryLng == null) {
+        if (mounted) Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Invalid boundary configuration")));
+        return;
+      }
+
+      final distance = _calculateDistanceMeters(
+          realTimeLat, realTimeLng, boundaryLat, boundaryLng);
 
       final bytes = await _loginPhoto!.readAsBytes();
       final String base64Image = base64Encode(bytes);
 
+      // -------------------------------
+      // STEP 5: LOCATION MISMATCH
+      // -------------------------------
       if (distance > 20) {
-        await FirebaseFirestore.instance.collection('attendance_logs').add({
+        await FirebaseFirestore.instance
+            .collection('attendance_logs')
+            .add({
           'userId': doc.id,
           'name': data['name'],
           'username': data['username'],
@@ -341,22 +331,24 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
           'status': 'Location Mismatch',
         });
 
-        if (mounted) {
-          Navigator.of(context).pop(); 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Access Denied: You are ${distance.toStringAsFixed(1)}m away."),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        if (mounted) Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  "Access Denied: ${distance.toStringAsFixed(1)}m away"),
+              backgroundColor: Colors.red),
+        );
         return;
       }
 
-      // ✅ STATUS: Finalizing
+      // -------------------------------
+      // STEP 6: SUCCESS
+      // -------------------------------
       statusText.value = "Finalizing Success...";
 
-      await FirebaseFirestore.instance.collection('attendance_logs').add({
+      await FirebaseFirestore.instance
+          .collection('attendance_logs')
+          .add({
         'userId': doc.id,
         'name': data['name'],
         'username': data['username'],
@@ -366,15 +358,18 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         'status': 'Present',
       });
 
-      await FirebaseFirestore.instance.collection('users').doc(doc.id).update({
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(doc.id)
+          .update({
         'latitude': realTimeLat,
         'longitude': realTimeLng,
         'lastLogin': FieldValue.serverTimestamp(),
       });
 
-      if(!mounted) return;
-      Navigator.of(context).pop(); 
-      
+      if (!mounted) return;
+      Navigator.of(context).pop();
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -386,32 +381,54 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
           ),
         ),
       );
-
     } catch (e) {
-      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
-  double _calculateDistanceMeters(double lat1, double lon1, double lat2, double lon2) {
+
+  double _calculateDistanceMeters(
+      double lat1,
+      double lon1,
+      double lat2,
+      double lon2) {
     const double earthRadius = 6371000;
     double dLat = (lat2 - lat1) * (pi / 180);
     double dLon = (lon2 - lon1) * (pi / 180);
     double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * (pi / 180)) * cos(lat2 * (pi / 180)) * sin(dLon / 2) * sin(dLon / 2);
-    return earthRadius * (2 * atan2(sqrt(a), sqrt(1 - a)));
+        cos(lat1 * (pi / 180)) *
+            cos(lat2 * (pi / 180)) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
+    return earthRadius *
+        (2 * atan2(sqrt(a), sqrt(1 - a)));
   }
 
-  InputDecoration _modernInput(String label, IconData icon) {
+  InputDecoration _modernInput(
+      String label, IconData icon) {
     return InputDecoration(
       labelText: label,
       labelStyle: const TextStyle(color: Colors.grey),
-      prefixIcon: Icon(icon, color: const Color(0xFF6A8A73)),
+      prefixIcon:
+          Icon(icon, color: const Color(0xFF6A8A73)),
       filled: true,
       fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade300)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF6A8A73), width: 2)),
+      contentPadding: const EdgeInsets.symmetric(
+          vertical: 18, horizontal: 16),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide:
+              BorderSide(color: Colors.grey.shade300)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(
+              color: Color(0xFF6A8A73), width: 2)),
     );
   }
 
@@ -422,30 +439,52 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       body: SafeArea(
         bottom: false,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 20),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
                 children: [
                   const SizedBox(),
                   TextButton.icon(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminLoginPage())),
-                    icon: const Icon(Icons.admin_panel_settings, color: Colors.white70, size: 20),
-                    label: const Text("ADMIN", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                const AdminLoginPage())),
+                    icon: const Icon(
+                        Icons.admin_panel_settings,
+                        color: Colors.white70,
+                        size: 20),
+                    label: const Text("ADMIN",
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+              padding:
+                  const EdgeInsets.fromLTRB(24, 0, 24, 20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: const [
-                  Text("Attendance Check", style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                  Text("Attendance Check",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold)),
                   SizedBox(height: 8),
-                  Text("Verify identity to clock in.", style: TextStyle(color: Colors.grey, fontSize: 16)),
+                  Text("Verify identity to clock in.",
+                      style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 16)),
                 ],
               ),
             ),
@@ -456,79 +495,179 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                   position: _slideAnim,
                   child: Container(
                     width: double.infinity,
-                    decoration: const BoxDecoration(
+                    decoration:
+                        const BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
+                      borderRadius:
+                          BorderRadius.only(
+                        topLeft:
+                            Radius.circular(30),
+                        topRight:
+                            Radius.circular(30),
+                      ),
                     ),
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
+                      padding:
+                          const EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
-                          
-                          if (!Platform.isWindows && _loginPhoto == null) 
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              margin: const EdgeInsets.only(bottom: 20),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF6A8A73).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFF6A8A73)),
-                              ),
-                              child: Column(
-                                children: [
-                                  const Text("SECURITY CHALLENGE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF6A8A73))),
-                                  const SizedBox(height: 4),
-                                  Text("Please: $_currentChallenge", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.black87)),
-                                ],
-                              ),
-                            ),
-
-                          TextFormField(controller: usernameController, decoration: _modernInput("Username", Icons.person_outline)),
-                          const SizedBox(height: 16),
-                          TextFormField(controller: passwordController, obscureText: true, decoration: _modernInput("Password", Icons.lock_outline)),
-                          const SizedBox(height: 16),
-                          
+                          Center(
+                              child: Container(
+                                  width: 40,
+                                  height: 4,
+                                  margin:
+                                      const EdgeInsets.only(
+                                          bottom: 20),
+                                  decoration: BoxDecoration(
+                                      color: Colors
+                                          .grey.shade300,
+                                      borderRadius:
+                                          BorderRadius
+                                              .circular(
+                                                  2)))),
+                          TextFormField(
+                              controller:
+                                  usernameController,
+                              decoration:
+                                  _modernInput(
+                                      "Username",
+                                      Icons
+                                          .person_outline)),
+                          const SizedBox(
+                              height: 16),
+                          TextFormField(
+                              controller:
+                                  passwordController,
+                              obscureText: true,
+                              decoration:
+                                  _modernInput(
+                                      "Password",
+                                      Icons
+                                          .lock_outline)),
+                          const SizedBox(
+                              height: 16),
                           GestureDetector(
                             onTap: _pickPhoto,
                             child: Container(
                               height: 140,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: _loginPhoto == null ? Colors.grey.shade300 : const Color(0xFF6A8A73), width: 2),
+                              width:
+                                  double.infinity,
+                              decoration:
+                                  BoxDecoration(
+                                color: Colors
+                                    .grey.shade50,
+                                borderRadius:
+                                    BorderRadius
+                                        .circular(16),
+                                border: Border.all(
+                                    color: _loginPhoto ==
+                                            null
+                                        ? Colors.grey
+                                            .shade300
+                                        : const Color(
+                                            0xFF6A8A73),
+                                    width: 2),
                               ),
-                              child: _loginPhoto != null
-                                  ? ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.file(_loginPhoto!, fit: BoxFit.cover, width: double.infinity))
+                              child: _loginPhoto !=
+                                      null
+                                  ? ClipRRect(
+                                      borderRadius:
+                                          BorderRadius
+                                              .circular(
+                                                  14),
+                                      child:
+                                          Image.file(
+                                        _loginPhoto!,
+                                        fit: BoxFit
+                                            .cover,
+                                        width: double
+                                            .infinity,
+                                      ))
                                   : Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(Icons.camera_alt_outlined, size: 30, color: Colors.grey),
-                                        const SizedBox(height: 8),
-                                        Text(Platform.isWindows ? "Capture Photo" : "Take Selfie ($_currentChallenge)", style: const TextStyle(color: Colors.grey)),
+                                      mainAxisAlignment:
+                                          MainAxisAlignment
+                                              .center,
+                                      children: const [
+                                        Icon(
+                                            Icons
+                                                .camera_alt_outlined,
+                                            size: 30,
+                                            color:
+                                                Colors
+                                                    .grey),
+                                        SizedBox(
+                                            height: 8),
+                                        Text(
+                                            "Take Selfie",
+                                            style: TextStyle(
+                                                color:
+                                                    Colors
+                                                        .grey)),
                                       ],
                                     ),
                             ),
                           ),
-                          const SizedBox(height: 32),
+                          const SizedBox(
+                              height: 32),
                           SizedBox(
-                            width: double.infinity,
+                            width:
+                                double.infinity,
                             height: 55,
-                            child: ElevatedButton(
+                            child:
+                                ElevatedButton(
                               onPressed: _login,
-                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                              child: const Text("Verify & Login", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                              style: ElevatedButton
+                                  .styleFrom(
+                                backgroundColor:
+                                    const Color(
+                                        0xFF6A8A73),
+                                shape:
+                                    RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius
+                                          .circular(
+                                              30),
+                                ),
+                              ),
+                              child: const Text(
+                                  "Verify & Login",
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight:
+                                          FontWeight
+                                              .bold,
+                                      color: Colors
+                                          .white)),
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(
+                              height: 24),
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisAlignment:
+                                MainAxisAlignment
+                                    .center,
                             children: [
-                              const Text("New Employee? ", style: TextStyle(color: Colors.grey)),
+                              const Text(
+                                  "New Employee? ",
+                                  style: TextStyle(
+                                      color:
+                                          Colors.grey)),
                               GestureDetector(
-                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPage())),
-                                child: const Text("Register", style: TextStyle(color: Color(0xFF101010), fontWeight: FontWeight.bold)),
+                                onTap: () =>
+                                    Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                const RegisterPage())),
+                                child: const Text(
+                                  "Register",
+                                  style: TextStyle(
+                                      color: Color(
+                                          0xFF101010),
+                                      fontWeight:
+                                          FontWeight
+                                              .bold),
+                                ),
                               ),
                             ],
                           ),

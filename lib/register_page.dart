@@ -27,7 +27,8 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
   bool _registeringFace = false;
 
   // 🔥 CHANGE IF YOUR IP CHANGES
-  final String backendUrl = "http://172.20.10.3:5000/register-face";
+  final String backendUrl =
+    "https://web-production-1beb.up.railway.app/register-face";
 
   late AnimationController _controller;
   late Animation<double> _fadeAnim;

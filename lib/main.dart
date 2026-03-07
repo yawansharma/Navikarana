@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:async'; // Required for Splash Screen Timer
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -29,11 +30,123 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: LoginPage(),
+      home: SplashScreen(), // Changed to start with Splash Screen
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// NEW: Animated Splash Screen with PNG Effect & Slow Disappear
+// ---------------------------------------------------------------------------
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    );
+
+    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+          parent: _controller,
+          curve: const Interval(0.0, 0.8, curve: Curves.easeIn)),
+    );
+
+    // Phase 1: Logo Appears
+    _controller.forward();
+
+    // Phase 2: Logic to disappear slowly and then navigate
+    Timer(const Duration(milliseconds: 2500), () async {
+      if (!mounted) return;
+      
+      // Change duration to make the disappear phase slower (1 second)
+      _controller.duration = const Duration(milliseconds: 1000);
+      
+      // Reverse the animation (logo shrinks and fades out)
+      _controller.reverse(); 
+      
+      // Wait for the slow fade to finish
+      await Future.delayed(const Duration(milliseconds: 1100));
+      
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 800),
+          pageBuilder: (_, __, ___) => const LoginPage(),
+          transitionsBuilder: (_, animation, __, child) =>
+              FadeTransition(opacity: animation, child: child),
+        ),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color.fromARGB(255, 228, 228, 228),
+      body: Center(
+        child: FadeTransition(
+          opacity: _opacityAnimation,
+          child: ScaleTransition(
+            scale: _scaleAnimation,
+            child: Container(
+              // --- PNG EFFECT: SOFT GLOW ---
+              decoration: BoxDecoration(
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6A8A73).withValues(alpha: 0.2),
+                    blurRadius: 40,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: ColorFiltered(
+                // --- PNG EFFECT: SAGE TINT ---
+                colorFilter: ColorFilter.mode(
+                  const Color(0xFF6A8A73).withValues(alpha: 0.08), 
+                  BlendMode.srcATop,
+                ),
+                child: Image.asset(
+                  'assets/navikarnaNew.png',
+                  width: 250,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LOGIN PAGE - ALL FUNCTIONS PRESERVED
+// ---------------------------------------------------------------------------
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -43,12 +156,14 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage>
     with SingleTickerProviderStateMixin {
-  final usernameController = TextEditingController();
+  final uniqueCodeController = TextEditingController();
   final passwordController = TextEditingController();
   File? _loginPhoto;
 
-  final String loginBackendUrl =
-    "https://web-production-1beb.up.railway.app/login-face"; // change if IP changes
+  static const String _backendBaseUrl =
+      "https://pasteshub-navikarana-backend.hf.space";
+
+  static const String _loginFaceEndpoint = "$_backendBaseUrl/login-face";
 
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
@@ -57,8 +172,8 @@ class _LoginPageState extends State<LoginPage>
   @override
   void initState() {
     super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 800));
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.1),
@@ -70,64 +185,51 @@ class _LoginPageState extends State<LoginPage>
   @override
   void dispose() {
     _controller.dispose();
-    usernameController.dispose();
+    uniqueCodeController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
-  Future<String?> _verifyFaceWithBackend() async {
+  Future<_FaceVerificationResult> _verifyFaceWithBackend() async {
     if (_loginPhoto == null) {
-      print("❌ No login photo available");
-      return null;
+      return _FaceVerificationResult(
+        verified: false,
+        errorMessage: "No photo selected.",
+      );
     }
 
     try {
-      print("🔵 Preparing request to backend...");
+      final request =
+          http.MultipartRequest('POST', Uri.parse(_loginFaceEndpoint));
 
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse(loginBackendUrl),
-      );
-
-      // ✅ Send username to backend
-      request.fields['username'] = usernameController.text.trim();
-
-      // ✅ Send image file
+      request.fields['username'] = uniqueCodeController.text.trim();
       request.files.add(
-        await http.MultipartFile.fromPath(
-          'image',
-          _loginPhoto!.path,
-        ),
+        await http.MultipartFile.fromPath('image', _loginPhoto!.path),
       );
 
-      print("📤 Sending image + username to backend...");
-      var response = await request.send();
+      final streamedResponse = await request.send();
+      final responseBody = await streamedResponse.stream.bytesToString();
 
-      print("📥 Backend responded with status: ${response.statusCode}");
+      debugPrint("Face login backend status: ${streamedResponse.statusCode}");
+      debugPrint("Face login backend body: $responseBody");
 
-      var responseData = await response.stream.bytesToString();
-      print("📦 Backend raw response: $responseData");
+      final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(responseData);
-
-        if (decoded["verified"] == true) {
-          print("✅ Face verified as: ${decoded["username"]}");
-          return decoded["username"];
-        } else {
-          print("❌ Face not verified");
-          return null;
-        }
-      } else {
-        print("❌ Backend error status");
-        return null;
+      if (decoded['verified'] == true) {
+        return _FaceVerificationResult(verified: true);
       }
+
+      final reason = decoded['error'] as String? ?? "Face not recognised.";
+      return _FaceVerificationResult(verified: false, errorMessage: reason);
     } catch (e) {
-      print("🚨 Face login exception: $e");
-      return null;
+      debugPrint("Face login network error: $e");
+      return _FaceVerificationResult(
+        verified: false,
+        errorMessage:
+            "Could not reach the server. Please check your connection.",
+      );
     }
   }
-
 
   Future<void> _pickPhoto() async {
     if (Platform.isWindows) {
@@ -136,8 +238,8 @@ class _LoginPageState extends State<LoginPage>
       await launchUrl(Uri.file(htmlPath),
           mode: LaunchMode.externalApplication);
 
-      final downloadsDir =
-          Directory('${Platform.environment['USERPROFILE']}\\Downloads');
+      final downloadsDir = Directory(
+          '${Platform.environment['USERPROFILE']}\\Downloads');
       final startTime = DateTime.now();
 
       while (DateTime.now().difference(startTime).inSeconds < 15) {
@@ -160,8 +262,10 @@ class _LoginPageState extends State<LoginPage>
 
     final XFile? photo = await ImagePicker().pickImage(
       source: ImageSource.camera,
-      imageQuality: 50,
       preferredCameraDevice: CameraDevice.front,
+      maxWidth: 640,
+      maxHeight: 640,
+      imageQuality: 100,
     );
 
     if (photo != null) {
@@ -171,13 +275,11 @@ class _LoginPageState extends State<LoginPage>
 
   Future<void> _login() async {
     if (_loginPhoto == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("📸 Selfie required to clock in")));
+      _showSnackBar("A selfie is required to clock in.");
       return;
     }
 
-    ValueNotifier<String> statusText =
-        ValueNotifier("Authenticating...");
+    final statusText = ValueNotifier("Authenticating...");
 
     showDialog(
       context: context,
@@ -186,19 +288,18 @@ class _LoginPageState extends State<LoginPage>
         onWillPop: () async => false,
         child: AlertDialog(
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
+              borderRadius: BorderRadius.circular(20)),
           content: ValueListenableBuilder<String>(
             valueListenable: statusText,
             builder: (context, value, child) {
               return Row(
                 children: [
-                  const CircularProgressIndicator(
-                      color: Color(0xFF6A8A73)),
+                  const CircularProgressIndicator(color: Color(0xFF6A8A73)),
                   const SizedBox(width: 20),
                   Expanded(
-                      child: Text(value,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold))),
+                    child: Text(value,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
                 ],
               );
             },
@@ -208,120 +309,92 @@ class _LoginPageState extends State<LoginPage>
     );
 
     try {
-      // -------------------------------
-      // STEP 1: Validate Credentials
-      // -------------------------------
-      final username = usernameController.text.trim();
+      final uniqueCode = uniqueCodeController.text.trim();
       final password = passwordController.text.trim();
 
       final query = await FirebaseFirestore.instance
           .collection('users')
-          .where('username', isEqualTo: username)
+          .where('username', isEqualTo: uniqueCode)
           .where('password', isEqualTo: password)
           .get();
 
       if (query.docs.isEmpty) {
-        if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Invalid credentials")));
+        _dismissDialogAndShow(statusText, "Invalid credentials.");
         return;
       }
 
       final doc = query.docs.first;
       final data = doc.data();
 
-      // -------------------------------
-      // STEP 2: FACE VERIFICATION FIRST
-      // -------------------------------
       statusText.value = "Analyzing Biometrics...";
 
-      print("🔵 Sending face to backend...");
+      final faceResult = await _verifyFaceWithBackend();
 
-      String? verifiedUsername =
-          await _verifyFaceWithBackend();
+      final bytes = await _loginPhoto!.readAsBytes();
+      final String base64Image = base64Encode(bytes);
 
-      print("🟢 Backend returned: $verifiedUsername");
+      if (!faceResult.verified) {
+        await FirebaseFirestore.instance.collection('attendance_logs').add({
+          'userId': doc.id,
+          'name': data['name'],
+          'username': data['username'],
+          'timestamp': FieldValue.serverTimestamp(),
+          'photoBase64': base64Image,
+          'status': 'Face Not Recognized',
+        });
 
-      if (verifiedUsername == null ||
-          verifiedUsername != username) {
-        if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Face not recognized")));
+        _dismissDialogAndShow(
+            statusText, faceResult.errorMessage ?? "Face not recognised.");
         return;
       }
 
-      // -------------------------------
-      // STEP 3: LOCATION CHECK
-      // -------------------------------
       statusText.value = "Verifying Location...";
 
-      LocationPermission permission =
-          await Geolocator.checkPermission();
-
+      LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
 
       if (permission != LocationPermission.always &&
           permission != LocationPermission.whileInUse) {
-        if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Location permission required")));
+        _dismissDialogAndShow(statusText, "Location permission is required.");
         return;
       }
 
-      final currentPosition =
-          await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.best);
+      final currentPosition = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.best);
 
       if (Platform.isAndroid && currentPosition.isMocked) {
-        if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Fake GPS detected")));
+        _dismissDialogAndShow(statusText, "Fake GPS detected. Access denied.");
         return;
       }
 
       final double realTimeLat = currentPosition.latitude;
       final double realTimeLng = currentPosition.longitude;
 
-      // -------------------------------
-      // STEP 4: BOUNDARY CHECK (SAFE)
-      // -------------------------------
       statusText.value = "Checking Geofence...";
 
       if (data['boundary'] == null) {
-        if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Boundary not set by Admin")));
+        _dismissDialogAndShow(
+            statusText, "Boundary not set by admin. Contact your administrator.");
         return;
       }
 
-      final boundaryData =
-          Map<String, dynamic>.from(data['boundary']);
-
+      final boundaryData = Map<String, dynamic>.from(data['boundary']);
       final boundaryLat = boundaryData['lat'];
       final boundaryLng = boundaryData['lng'];
 
       if (boundaryLat == null || boundaryLng == null) {
-        if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Invalid boundary configuration")));
+        _dismissDialogAndShow(
+            statusText, "Invalid boundary configuration. Contact your administrator.");
         return;
       }
 
       final distance = _calculateDistanceMeters(
           realTimeLat, realTimeLng, boundaryLat, boundaryLng);
 
-      final bytes = await _loginPhoto!.readAsBytes();
-      final String base64Image = base64Encode(bytes);
-
-      // -------------------------------
-      // STEP 5: LOCATION MISMATCH
-      // -------------------------------
       if (distance > 20) {
-        await FirebaseFirestore.instance
-            .collection('attendance_logs')
-            .add({
+        await FirebaseFirestore.instance.collection('attendance_logs').add({
           'userId': doc.id,
           'name': data['name'],
           'username': data['username'],
@@ -334,21 +407,17 @@ class _LoginPageState extends State<LoginPage>
         if (mounted) Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  "Access Denied: ${distance.toStringAsFixed(1)}m away"),
-              backgroundColor: Colors.red),
+            content: Text(
+                "Access denied: ${distance.toStringAsFixed(1)}m outside boundary."),
+            backgroundColor: Colors.red,
+          ),
         );
         return;
       }
 
-      // -------------------------------
-      // STEP 6: SUCCESS
-      // -------------------------------
-      statusText.value = "Finalizing Success...";
+      statusText.value = "Finalizing...";
 
-      await FirebaseFirestore.instance
-          .collection('attendance_logs')
-          .add({
+      await FirebaseFirestore.instance.collection('attendance_logs').add({
         'userId': doc.id,
         'name': data['name'],
         'username': data['username'],
@@ -382,53 +451,51 @@ class _LoginPageState extends State<LoginPage>
         ),
       );
     } catch (e) {
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.of(context).pop();
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
+      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+      if (mounted) _showSnackBar("An unexpected error occurred: $e");
     }
   }
 
+  void _dismissDialogAndShow(ValueNotifier<String> statusText, String message) {
+    if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+    _showSnackBar(message);
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
 
   double _calculateDistanceMeters(
-      double lat1,
-      double lon1,
-      double lat2,
-      double lon2) {
+      double lat1, double lon1, double lat2, double lon2) {
     const double earthRadius = 6371000;
-    double dLat = (lat2 - lat1) * (pi / 180);
-    double dLon = (lon2 - lon1) * (pi / 180);
-    double a = sin(dLat / 2) * sin(dLat / 2) +
+    final double dLat = (lat2 - lat1) * (pi / 180);
+    final double dLon = (lon2 - lon1) * (pi / 180);
+    final double a = sin(dLat / 2) * sin(dLat / 2) +
         cos(lat1 * (pi / 180)) *
             cos(lat2 * (pi / 180)) *
             sin(dLon / 2) *
             sin(dLon / 2);
-    return earthRadius *
-        (2 * atan2(sqrt(a), sqrt(1 - a)));
+    return earthRadius * (2 * atan2(sqrt(a), sqrt(1 - a)));
   }
 
-  InputDecoration _modernInput(
-      String label, IconData icon) {
+  InputDecoration _modernInput(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.grey),
-      prefixIcon:
-          Icon(icon, color: const Color(0xFF6A8A73)),
+      labelStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+      prefixIcon: Icon(icon, color: const Color(0xFF6A8A73), size: 20),
       filled: true,
       fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(
-          vertical: 18, horizontal: 16),
+      contentPadding:
+          const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
       enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide:
-              BorderSide(color: Colors.grey.shade300)),
+          borderSide: BorderSide(color: Colors.grey.shade200)),
       focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-              color: Color(0xFF6A8A73), width: 2)),
+          borderSide: const BorderSide(color: Color(0xFF6A8A73), width: 2)),
     );
   }
 
@@ -439,55 +506,60 @@ class _LoginPageState extends State<LoginPage>
       body: SafeArea(
         bottom: false,
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Row(
-                mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const SizedBox(),
+                  const Text(
+                    "Navikarana",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        letterSpacing: 1.2),
+                  ),
                   TextButton.icon(
                     onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) =>
-                                const AdminLoginPage())),
-                    icon: const Icon(
-                        Icons.admin_panel_settings,
-                        color: Colors.white70,
-                        size: 20),
-                    label: const Text("ADMIN",
-                        style: TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w600)),
+                            builder: (_) => const AdminLoginPage())),
+                    icon: const Icon(Icons.admin_panel_settings_outlined,
+                        color: Colors.white70, size: 18),
+                    label: const Text(
+                      "ADMIN",
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12),
+                    ),
                   ),
                 ],
               ),
             ),
-            Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(24, 0, 24, 20),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: const [
-                  Text("Attendance Check",
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold)),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Welcome Back",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold),
+                  ),
                   SizedBox(height: 8),
-                  Text("Verify identity to clock in.",
-                      style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 16)),
+                  Text(
+                    "Verify your unique code and identity.",
+                    style: TextStyle(color: Colors.grey, fontSize: 15),
+                  ),
                 ],
               ),
             ),
+            const SizedBox(height: 30),
             Expanded(
               child: FadeTransition(
                 opacity: _fadeAnim,
@@ -495,182 +567,184 @@ class _LoginPageState extends State<LoginPage>
                   position: _slideAnim,
                   child: Container(
                     width: double.infinity,
-                    decoration:
-                        const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius:
-                          BorderRadius.only(
-                        topLeft:
-                            Radius.circular(30),
-                        topRight:
-                            Radius.circular(30),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8F9FB),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(35),
+                        topRight: Radius.circular(35),
                       ),
                     ),
                     child: SingleChildScrollView(
-                      padding:
-                          const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(24),
                       child: Column(
                         children: [
                           Center(
-                              child: Container(
-                                  width: 40,
-                                  height: 4,
-                                  margin:
-                                      const EdgeInsets.only(
-                                          bottom: 20),
-                                  decoration: BoxDecoration(
-                                      color: Colors
-                                          .grey.shade300,
-                                      borderRadius:
-                                          BorderRadius
-                                              .circular(
-                                                  2)))),
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              margin: const EdgeInsets.only(bottom: 30),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
                           TextFormField(
-                              controller:
-                                  usernameController,
-                              decoration:
-                                  _modernInput(
-                                      "Username",
-                                      Icons
-                                          .person_outline)),
-                          const SizedBox(
-                              height: 16),
+                            controller: uniqueCodeController,
+                            decoration: _modernInput(
+                                "Unique Code", Icons.badge_outlined),
+                          ),
+                          const SizedBox(height: 16),
                           TextFormField(
-                              controller:
-                                  passwordController,
-                              obscureText: true,
-                              decoration:
-                                  _modernInput(
-                                      "Password",
-                                      Icons
-                                          .lock_outline)),
-                          const SizedBox(
-                              height: 16),
+                            controller: passwordController,
+                            obscureText: true,
+                            decoration:
+                                _modernInput("Password", Icons.lock_outline),
+                          ),
+                          const SizedBox(height: 20),
                           GestureDetector(
                             onTap: _pickPhoto,
                             child: Container(
-                              height: 140,
-                              width:
-                                  double.infinity,
-                              decoration:
-                                  BoxDecoration(
-                                color: Colors
-                                    .grey.shade50,
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(16),
+                              height: 160,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                    color: _loginPhoto ==
-                                            null
-                                        ? Colors.grey
-                                            .shade300
-                                        : const Color(
-                                            0xFF6A8A73),
-                                    width: 2),
+                                  color: _loginPhoto == null
+                                      ? Colors.grey.shade200
+                                      : const Color(0xFF6A8A73),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.02),
+                                    blurRadius: 10,
+                                  ),
+                                ],
                               ),
-                              child: _loginPhoto !=
-                                      null
+                              child: _loginPhoto != null
                                   ? ClipRRect(
-                                      borderRadius:
-                                          BorderRadius
-                                              .circular(
-                                                  14),
-                                      child:
-                                          Image.file(
+                                      borderRadius: BorderRadius.circular(18),
+                                      child: Image.file(
                                         _loginPhoto!,
-                                        fit: BoxFit
-                                            .cover,
-                                        width: double
-                                            .infinity,
-                                      ))
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                      ),
+                                    )
                                   : Column(
                                       mainAxisAlignment:
-                                          MainAxisAlignment
-                                              .center,
-                                      children: const [
+                                          MainAxisAlignment.center,
+                                      children: [
                                         Icon(
-                                            Icons
-                                                .camera_alt_outlined,
-                                            size: 30,
-                                            color:
-                                                Colors
-                                                    .grey),
-                                        SizedBox(
-                                            height: 8),
+                                            Icons.face_retouching_natural_rounded,
+                                            size: 40,
+                                            color: Colors.grey.shade400),
+                                        const SizedBox(height: 10),
                                         Text(
-                                            "Take Selfie",
-                                            style: TextStyle(
-                                                color:
-                                                    Colors
-                                                        .grey)),
+                                          "Capture Selfie Verification",
+                                          style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
                                       ],
                                     ),
                             ),
                           ),
-                          const SizedBox(
-                              height: 32),
+                          const SizedBox(height: 40),
                           SizedBox(
-                            width:
-                                double.infinity,
-                            height: 55,
-                            child:
-                                ElevatedButton(
+                            width: double.infinity,
+                            height: 58,
+                            child: ElevatedButton(
                               onPressed: _login,
-                              style: ElevatedButton
-                                  .styleFrom(
-                                backgroundColor:
-                                    const Color(
-                                        0xFF6A8A73),
-                                shape:
-                                    RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius
-                                          .circular(
-                                              30),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6A8A73),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
                               child: const Text(
-                                  "Verify & Login",
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight:
-                                          FontWeight
-                                              .bold,
-                                      color: Colors
-                                          .white)),
+                                "Verify & Clock In",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(
-                              height: 24),
+                          const SizedBox(height: 25),
                           Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment
-                                    .center,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Text(
-                                  "New Employee? ",
-                                  style: TextStyle(
-                                      color:
-                                          Colors.grey)),
+                                "First day at work? ",
+                                style: TextStyle(color: Colors.grey),
+                              ),
                               GestureDetector(
-                                onTap: () =>
-                                    Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                            builder: (_) =>
-                                                const RegisterPage())),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const RegisterPage()),
+                                ),
                                 child: const Text(
-                                  "Register",
+                                  "Register here",
                                   style: TextStyle(
-                                      color: Color(
-                                          0xFF101010),
-                                      fontWeight:
-                                          FontWeight
-                                              .bold),
+                                    color: Color(0xFF6A8A73),
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
+                          
+                          // --- PNG EFFECT LOGO FOOTER ---
+                          const SizedBox(height: 50),
+                          Center(
+                            child: Opacity(
+                              opacity: 0.6,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF6A8A73).withValues(alpha: 0.15),
+                                          blurRadius: 20,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
+                                    ),
+                                    child: ColorFiltered(
+                                      colorFilter: ColorFilter.mode(
+                                        const Color(0xFF6A8A73).withValues(alpha: 0.1), 
+                                        BlendMode.srcATop,
+                                      ),
+                                      child: Image.asset(
+                                        'assets/navikarnaNew.png',
+                                        width: 90, 
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "POWERED BY NAVIKARANA",
+                                    style: TextStyle(
+                                      color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 80),
                         ],
                       ),
                     ),
@@ -683,4 +757,10 @@ class _LoginPageState extends State<LoginPage>
       ),
     );
   }
+}
+
+class _FaceVerificationResult {
+  final bool verified;
+  final String? errorMessage;
+  _FaceVerificationResult({required this.verified, this.errorMessage});
 }

@@ -1,7 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-
-// ⚠️ IMPORTANT: Import main.dart so we can navigate back to LoginPage
 import 'main.dart'; 
 
 class HomePage extends StatelessWidget {
@@ -28,12 +26,10 @@ class HomePage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.white,
-        // ✅ 1. THE BACK BUTTON
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           tooltip: "Logout",
           onPressed: () {
-            // ✅ 2. Navigate back to Login Page and clear history
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => const LoginPage()),
@@ -172,7 +168,7 @@ class HomePage extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text("Location Status", style: TextStyle(color: Colors.grey.shade600)),
-                              Text("Matched", style: const TextStyle(fontWeight: FontWeight.bold)),
+                              const Text("Matched", style: TextStyle(fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ],
@@ -204,7 +200,56 @@ class HomePage extends StatelessWidget {
                           ),
                         ],
                       ),
-                    )
+                    ),
+
+                    // ---------------------------------------------------
+                    // PERSISTENT FOOTER LOGO
+                    // ---------------------------------------------------
+                    const SizedBox(height: 50),
+                    Center(
+                      child: Opacity(
+                        opacity: 0.6,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF6A8A73).withOpacity(0.15),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: ColorFiltered(
+                                colorFilter: ColorFilter.mode(
+                                  const Color(0xFF6A8A73).withOpacity(0.1), 
+                                  BlendMode.srcATop,
+                                ),
+                                child: Image.asset(
+                                  'assets/navikarnaNew.png',
+                                  width: 90, 
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "POWERED BY NAVIKARANA",
+                              style: TextStyle(
+                                color: const Color(0xFF6A8A73).withOpacity(0.8),
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
                   ],
                 ),
               ),

@@ -24,11 +24,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   // Helper function to extract shortforms from school names
   String _getShortSchoolName(String fullName) {
-    // Logic: Look for text inside brackets
     if (fullName.contains('(') && fullName.contains(')')) {
       return fullName.substring(fullName.indexOf('(') + 1, fullName.indexOf(')'));
     }
-    // Specific manual mapping for items without brackets
     if (fullName == "School of Law") return "Law";
     return fullName;
   }
@@ -202,6 +200,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   final data = logDoc.data() as Map<String, dynamic>;
                   bool isDeleted = !activeUserIds.contains(data['userId']);
                   bool isMismatch = data['status'] == "Location Mismatch";
+                  bool isFaceFail = data['status'] == "Face Not Recognized";
                   bool isPresent = data['status'] == "Present";
                   DateTime date = data['timestamp'] != null ? (data['timestamp'] as Timestamp).toDate() : DateTime.now();
                   String photoBase64 = data['photoBase64'] ?? '';
@@ -216,6 +215,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     latitude: latitude,
                     longitude: longitude,
                     isMismatch: isMismatch,
+                    isFaceFail: isFaceFail,
                     isPresent: isPresent,
                     isDeleted: isDeleted,
                   );
@@ -236,6 +236,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     required double? latitude,
     required double? longitude,
     required bool isMismatch,
+    required bool isFaceFail,
     required bool isPresent,
     required bool isDeleted,
   }) {
@@ -245,16 +246,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
         String department = "N/A";
         if (userSnapshot.hasData && userSnapshot.data != null && userSnapshot.data!.exists) {
           final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
-          // MODIFICATION: Transform full school name to shortform
           department = _getShortSchoolName(userData?['department'] ?? "N/A");
         }
 
         String userId = data['userId'] ?? "Unknown";
         String deviceId = data['deviceId'] ?? _generateDeviceId(userId, date);
         
+        bool hasFailed = isMismatch || isFaceFail || isDeleted;
         Color statusColor = Colors.grey;
         if (isDeleted) statusColor = Colors.red;
         else if (isMismatch) statusColor = Colors.orange;
+        else if (isFaceFail) statusColor = Colors.redAccent;
         else if (isPresent) statusColor = const Color(0xFF6A8A73);
 
         return StatefulBuilder(
@@ -287,9 +289,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 20),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        // MODIFICATION: Card background turns light red if authentication fails
+                        color: hasFailed ? const Color(0xFFFFF5F5) : Colors.white,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.grey.shade100, width: 1),
+                        border: Border.all(
+                          color: hasFailed ? Colors.red.withOpacity(0.2) : Colors.grey.shade100, 
+                          width: 1
+                        ),
                         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 4))],
                       ),
                       child: StatefulBuilder(
@@ -324,7 +330,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                           const SizedBox(height: 4),
                                           Row(
                                             children: [
-                                              _buildStatusBadge(isMismatch, isPresent, isDeleted),
+                                              _buildStatusBadge(isMismatch, isFaceFail, isPresent, isDeleted),
                                               const SizedBox(width: 8),
                                               Expanded(
                                                 child: Text("ID: $userId", style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontFamily: "Courier"), overflow: TextOverflow.ellipsis),
@@ -346,13 +352,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   ],
                                 ),
                               ),
+                              
                               if (isExpanded)
                                 Container(
                                   width: double.infinity,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFBFBFC),
+                                    color: hasFailed ? Colors.red.withOpacity(0.02) : const Color(0xFFFBFBFC),
                                     borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
-                                    border: Border(top: BorderSide(color: Colors.grey.shade100))
+                                    border: Border(top: BorderSide(color: hasFailed ? Colors.red.withOpacity(0.1) : Colors.grey.shade100))
                                   ),
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
@@ -360,7 +367,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Container(
-                                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white, 
+                                            borderRadius: BorderRadius.circular(12), 
+                                            border: Border.all(color: hasFailed ? Colors.red.withOpacity(0.1) : Colors.grey.shade200)
+                                          ),
                                           padding: const EdgeInsets.all(12),
                                           child: Column(
                                             children: [
@@ -368,11 +379,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                               const Divider(height: 16, color: Color(0xFFF0F0F0)),
                                               _buildDataRow("Device ID", deviceId),
                                               const Divider(height: 16, color: Color(0xFFF0F0F0)),
-                                              _buildDataRow("Auth Status", _getAuthStatusText(isMismatch, isPresent, isDeleted)),
+                                              _buildDataRow("Auth Status", _getAuthStatusText(isMismatch, isFaceFail, isPresent, isDeleted)),
                                             ],
                                           ),
                                         ),
                                         const SizedBox(height: 16),
+                                        
                                         if (latitude != null && longitude != null)
                                           Padding(
                                             padding: const EdgeInsets.only(bottom: 16),
@@ -380,8 +392,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                               children: [
                                                 Container(
                                                   padding: const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(color: const Color(0xFF6A8A73).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                                                  child: const Icon(Icons.location_on_outlined, color: Color(0xFF6A8A73), size: 20),
+                                                  decoration: BoxDecoration(
+                                                    color: (isMismatch ? Colors.orange : const Color(0xFF6A8A73)).withOpacity(0.1), 
+                                                    borderRadius: BorderRadius.circular(10)
+                                                  ),
+                                                  child: Icon(Icons.location_on_outlined, color: isMismatch ? Colors.orange : const Color(0xFF6A8A73), size: 20),
                                                 ),
                                                 const SizedBox(width: 12),
                                                 Expanded(
@@ -401,6 +416,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                               ],
                                             ),
                                           ),
+                                          
                                         _buildNoteSection(
                                           icon: Icons.flash_on_rounded, 
                                           title: "Quick Notes", 
@@ -477,7 +493,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  Widget _buildStatusBadge(bool isMismatch, bool isPresent, bool isDeleted) {
+  Widget _buildStatusBadge(bool isMismatch, bool isFaceFail, bool isPresent, bool isDeleted) {
     late Color badgeColor;
     late Color textColor;
     late IconData icon;
@@ -486,18 +502,23 @@ class _AdminHomePageState extends State<AdminHomePage> {
     if (isDeleted) {
       badgeColor = Colors.red.shade50;
       textColor = Colors.red.shade700;
-      icon = Icons.error_outline;
-      label = "Deleted";
+      icon = Icons.person_off_outlined;
+      label = "User Deleted";
+    } else if (isFaceFail) {
+      badgeColor = Colors.red.shade50;
+      textColor = Colors.red.shade900;
+      icon = Icons.face_retouching_off_rounded;
+      label = "Face Mismatch";
     } else if (isMismatch) {
       badgeColor = Colors.orange.shade50;
       textColor = Colors.orange.shade800;
-      icon = Icons.warning_amber_rounded;
-      label = "Mismatch";
+      icon = Icons.location_off_rounded;
+      label = "Location Error";
     } else if (isPresent) {
       badgeColor = Colors.green.shade50;
       textColor = Colors.green.shade700;
-      icon = Icons.check_circle_outline;
-      label = "Present";
+      icon = Icons.verified_user_outlined;
+      label = "Verified";
     } else {
       badgeColor = Colors.grey.shade100;
       textColor = Colors.grey.shade700;
@@ -554,11 +575,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
     return deviceId.length > 12 ? deviceId.substring(0, 12) : deviceId;
   }
 
-  String _getAuthStatusText(bool isMismatch, bool isPresent, bool isDeleted) {
-    if (isDeleted) return "User Deleted";
-    if (isMismatch) return "Location Mismatch";
-    if (isPresent) return "Verified";
-    return "Unknown";
+  String _getAuthStatusText(bool isMismatch, bool isFaceFail, bool isPresent, bool isDeleted) {
+    if (isDeleted) return "Verification Failed: Account Removed";
+    if (isFaceFail) return "Verification Failed: Face Not Recognized";
+    if (isMismatch) return "Verification Failed: Location Boundary Violation";
+    if (isPresent) return "Access Granted: Identity Verified";
+    return "Unknown Status";
   }
 
   Future<void> _exportLogsToCSV() async {
@@ -591,9 +613,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
       while (userPart.length < 5) userPart = userPart + '_';
       String deviceId = d['deviceId'] ?? "$userPart-${dt.year % 100}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}";
       if (deviceId.length > 12) deviceId = deviceId.substring(0, 12);
-      String authStatus = d['status'] == 'Location Mismatch' ? 'Location Mismatch' : (d['status'] == 'Present' ? 'Verified' : 'Unknown');
-
-      rows.add(["${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}", d['userId'] ?? 'Unknown', d['name'] ?? 'Unknown', department, deviceId, authStatus, d['location']?['lat'] ?? '', d['location']?['lng'] ?? '', d['quickNotes'] ?? '', d['adminNotes'] ?? '']);
+      
+      rows.add(["${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}", d['userId'] ?? 'Unknown', d['name'] ?? 'Unknown', department, deviceId, d['status'] ?? 'Unknown', d['location']?['lat'] ?? '', d['location']?['lng'] ?? '', d['quickNotes'] ?? '', d['adminNotes'] ?? '']);
     }
 
     String csvData = const ListToCsvConverter().convert(rows);

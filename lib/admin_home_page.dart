@@ -18,7 +18,9 @@ import 'package:google_fonts/google_fonts.dart';
 // =============================================================================
 class AdminHomePage extends StatefulWidget {
   final String adminName;
-  const AdminHomePage({super.key, required this.adminName});
+  final String adminId;
+  final bool isDean;
+  const AdminHomePage({super.key, required this.adminName, required this.adminId, this.isDean = false});
 
   @override
   State<AdminHomePage> createState() => _AdminHomePageState();
@@ -46,11 +48,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const LoginPage()),
-            (route) => false,
-          ),
+          onPressed: () {
+            if (widget.isDean) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+                (route) => false,
+              );
+            }
+          },
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,7 +229,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   // ===========================================================================
   Widget _buildClassesTab() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('classes').snapshots(),
+      stream: FirebaseFirestore.instance.collection('classes').where('createdBy', isEqualTo: widget.adminId).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(
@@ -463,7 +471,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           .set({
                         'className': nameCtrl.text.trim(),
                         'classCode': codeCtrl.text.trim(),
-                        'adminId': widget.adminName,
+                        'adminName': widget.adminName,
+                        'createdBy': widget.adminId,
                         'studentIds': [],
                         'boundary': pendingBoundary,
                       });
@@ -654,7 +663,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('attendance_logs')
-          .orderBy('timestamp', descending: true)
+          .where('adminId', isEqualTo: widget.adminId)
           .snapshots(),
       builder: (context, snapshot) {
         // Show a skeleton/shimmer-style placeholder while loading
@@ -688,7 +697,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
           );
         }
 
-        var logs = snapshot.data!.docs;
+        var logs = snapshot.data!.docs.toList();
+        
+        // Sort by timestamp descending in memory (Avoids Firebase Composite Index requirement)
+        logs.sort((a, b) {
+          final tA = (a.data() as Map)['timestamp'] as Timestamp?;
+          final tB = (b.data() as Map)['timestamp'] as Timestamp?;
+          if (tA == null && tB == null) return 0;
+          if (tA == null) return 1;
+          if (tB == null) return -1;
+          return tB.compareTo(tA);
+        });
 
         // Date filter
         if (_dateRange != null) {

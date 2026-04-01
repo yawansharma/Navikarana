@@ -228,9 +228,13 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         entryStatus = "Late Window";
       }
 
+      final classDoc = await FirebaseFirestore.instance.collection('classes').doc(widget.classId).get();
+      final adminId = classDoc.data()?['createdBy'] ?? classDoc.data()?['adminId'] ?? '';
+
       await FirebaseFirestore.instance.collection('attendance_logs').add({
         'userId': widget.username,
         'classId': widget.classId,
+        'adminId': adminId,
         'periodId': activePeriod['id'],
         'className': widget.className,
         'timestamp': FieldValue.serverTimestamp(),

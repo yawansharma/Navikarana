@@ -1,5 +1,6 @@
 import 'dart:math'; // For Random Captcha
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'admin_home_page.dart'; 
 import 'main.dart'; // Import main to navigate back to User Login
 import 'app_theme.dart';
@@ -58,31 +59,106 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
 
   // 🔐 LOGIN LOGIC
   Future<void> _login() async {
-    const demoAdminId = "admin";
-    const demoPassword = "admin123";
-
     // 1. Check Captcha
     if (captchaController.text.toUpperCase().trim() != _generatedCaptcha) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Incorrect Captcha. Try again.")),
-      );
+      _showError("Incorrect Captcha. Try again.");
       _generateCaptcha(); // Refresh on fail
       captchaController.clear();
       return;
     }
 
-    // 2. Check Credentials
-    if (usernameController.text.trim() == demoAdminId && 
-        passwordController.text.trim() == demoPassword) {
-      Navigator.pushReplacement(context, MaterialPageRoute(
-          builder: (_) => const AdminHomePage(adminName: "Demo Admin"),
-      ));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Invalid Admin ID or Password")),
-      );
-      _generateCaptcha(); // Refresh on fail
+    final adminId = usernameController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (adminId.isEmpty || password.isEmpty) {
+      _showError("Please enter Admin ID and Password.");
+      return;
     }
+
+    final statusText = ValueNotifier("Authenticating...");
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: ValueListenableBuilder<String>(
+            valueListenable: statusText,
+            builder: (context, value, child) {
+              return Row(
+                children: [
+                  const CircularProgressIndicator(color: Color(0xFF6A8A73)),
+                  const SizedBox(width: 20),
+                  Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final query = await FirebaseFirestore.instance
+          .collection('users')
+          .where('username', isEqualTo: adminId)
+          .where('password', isEqualTo: password)
+          .get();
+
+      if (query.docs.isEmpty) {
+        _dismissAndShowError("Invalid Admin ID or Password");
+        _generateCaptcha();
+        return;
+      }
+
+      final doc = query.docs.first;
+      final data = doc.data();
+
+      // RBAC Security Check
+      final role = data['role'] as String?;
+      if (role != 'admin' && role != 'dean') {
+        _dismissAndShowError("Unauthorized access. This portal is for Administrators only.");
+        _generateCaptcha();
+        return;
+      }
+
+      // Check account status
+      if (data['status'] == 'disabled') {
+        _dismissAndShowError("Your admin account has been disabled. Please contact the Dean.");
+        _generateCaptcha();
+        return;
+      }
+
+      statusText.value = "Finalizing...";
+
+      await FirebaseFirestore.instance.collection('users').doc(doc.id).update({
+        'lastLogin': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+
+      final adminName = data['name'] ?? adminId;
+      Navigator.pushReplacement(context, MaterialPageRoute(
+          builder: (_) => AdminHomePage(adminName: adminName, adminId: adminId),
+      ));
+    } catch (e) {
+      _dismissAndShowError("An unexpected error occurred: $e");
+    }
+  }
+
+  void _dismissAndShowError(String message) {
+    if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+    _showError(message);
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
   }
 
 

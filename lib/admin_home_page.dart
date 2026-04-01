@@ -10,6 +10,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'main.dart';
 import 'community_page.dart';
+import 'app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 // =============================================================================
 // AdminHomePage — 3-tab shell: Classes | Global Logs | More
@@ -24,8 +26,13 @@ class AdminHomePage extends StatefulWidget {
 
 class _AdminHomePageState extends State<AdminHomePage> {
   int _currentIndex = 0;
+  int _prevIndex = 0;
   DateTimeRange? _dateRange;
   String? _classFilter; // used in Global Logs tab
+
+  // Log selection state
+  bool _selectionMode = false;
+  final Set<String> _selectedLogIds = {};
 
   // ---------------------------------------------------------------------------
   // Scaffold
@@ -45,74 +52,88 @@ class _AdminHomePageState extends State<AdminHomePage> {
             (route) => false,
           ),
         ),
-        title: Text(
-          _tabTitle(),
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _tabTitle(),
+              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppTheme.kGreen.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppTheme.kGreen.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                "ADMIN: ${widget.adminName.toUpperCase()}",
+                style: GoogleFonts.poppins(color: AppTheme.kGreen, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.5),
+              ),
+            ),
+          ],
         ),
         actions: _buildAppBarActions(),
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
-            child: Row(
-              children: [
-                Text(
-                  "Welcome, ${widget.adminName}",
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                ),
-                const Spacer(),
-                const CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Color(0xFF202020),
-                  child: Icon(Icons.admin_panel_settings,
-                      color: Colors.white70, size: 18),
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 12),
           Expanded(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF8F9FB),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
-              ),
-              child: ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(35)),
-                child: _buildCurrentTab(),
+            child: RisingSheet(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8F9FB),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+                ),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius:
+                            const BorderRadius.vertical(top: Radius.circular(35)),
+                        child: _buildCurrentTab(),
+                      ),
+                    ),
+                    // Integrated Navigation Bar
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, -2),
+                          ),
+                        ],
+                      ),
+                      child: BottomNavigationBar(
+                        currentIndex: _currentIndex,
+                        onTap: (i) => setState(() {
+                          _prevIndex = _currentIndex;
+                          _currentIndex = i;
+                          // Clear selection when leaving analytics
+                          if (i != 1) { _selectionMode = false; _selectedLogIds.clear(); }
+                        }),
+                        backgroundColor: Colors.white,
+                        selectedItemColor: AppTheme.kGreen,
+                        unselectedItemColor: Colors.grey.shade400,
+                        showSelectedLabels: true,
+                        showUnselectedLabels: false,
+                        elevation: 0,
+                        type: BottomNavigationBarType.fixed,
+                        items: const [
+                          BottomNavigationBarItem(icon: Icon(Icons.class_outlined, size: 22), label: "Classes"),
+                          BottomNavigationBarItem(icon: Icon(Icons.analytics_outlined, size: 22), label: "Analytics"),
+                          BottomNavigationBarItem(icon: Icon(Icons.more_horiz_rounded, size: 22), label: "Settings"),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ],
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, -2))
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF6A8A73),
-          unselectedItemColor: Colors.grey.shade400,
-          elevation: 0,
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-                icon: Icon(Icons.class_outlined), label: "Classes"),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.dashboard_rounded), label: "Global Logs"),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.more_horiz_rounded), label: "More"),
-          ],
-        ),
       ),
     );
   }
@@ -122,9 +143,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
       case 0:
         return "Classes";
       case 1:
-        return "Global Logs";
+        return "Analytics";
       case 2:
-        return "More";
+        return "Settings";
       default:
         return "";
     }
@@ -165,16 +186,34 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   Widget _buildCurrentTab() {
-    switch (_currentIndex) {
-      case 0:
-        return _buildClassesTab();
-      case 1:
-        return _buildGlobalLogsTab();
-      case 2:
-        return _buildMoreTab();
-      default:
-        return const SizedBox.shrink();
-    }
+    final tabs = [
+      _buildClassesTab(),
+      _buildGlobalLogsTab(),
+      _buildMoreTab(),
+    ];
+    // Slide direction: going right → slide in from right, going left → from left
+    final bool goingRight = _currentIndex > _prevIndex;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 320),
+      transitionBuilder: (child, animation) {
+        final isEntering = child.key == ValueKey<int>(_currentIndex);
+        final begin = isEntering
+            ? Offset(goingRight ? 1.0 : -1.0, 0)
+            : Offset(goingRight ? -1.0 : 1.0, 0);
+        final slide = Tween<Offset>(begin: begin, end: Offset.zero)
+            .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+        return ClipRect(
+          child: FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
+            child: SlideTransition(position: slide, child: child),
+          ),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<int>(_currentIndex),
+        child: tabs[_currentIndex],
+      ),
+    );
   }
 
   // ===========================================================================
@@ -217,12 +256,18 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           borderRadius: BorderRadius.circular(20),
                           onTap: () => Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => ClassManagementPage(
+                            PageRouteBuilder(
+                              pageBuilder: (_, __, ___) => ClassManagementPage(
                                 classId: classDoc.id,
                                 classData: data,
                                 adminName: widget.adminName,
                               ),
+                              transitionsBuilder: (_, anim, __, child) {
+                                final slide = Tween(begin: const Offset(0, 1), end: Offset.zero)
+                                    .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic));
+                                return SlideTransition(position: slide, child: child);
+                              },
+                              transitionDuration: const Duration(milliseconds: 350),
                             ),
                           ),
                           child: Padding(
@@ -612,9 +657,35 @@ class _AdminHomePageState extends State<AdminHomePage> {
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
+        // Show a skeleton/shimmer-style placeholder while loading
         if (!snapshot.hasData) {
-          return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
+          return Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(24, 20, 24, 16),
+                child: Row(
+                  children: [
+                    Text('All Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Spacer(),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  itemCount: 6,
+                  itemBuilder: (_, __) => Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
         }
 
         var logs = snapshot.data!.docs;
@@ -624,59 +695,137 @@ class _AdminHomePageState extends State<AdminHomePage> {
           logs = logs.where((doc) {
             if (doc['timestamp'] == null) return false;
             final dt = (doc['timestamp'] as Timestamp).toDate();
-            return dt.isAfter(
-                    _dateRange!.start.subtract(const Duration(days: 1))) &&
+            return dt.isAfter(_dateRange!.start.subtract(const Duration(days: 1))) &&
                 dt.isBefore(_dateRange!.end.add(const Duration(days: 1)));
           }).toList();
         }
 
         // Class filter
         if (_classFilter != null) {
-          logs = logs
-              .where(
-                  (doc) => (doc.data() as Map)['classId'] == _classFilter)
-              .toList();
+          logs = logs.where((doc) => (doc.data() as Map)['classId'] == _classFilter).toList();
+        }
+
+        // Filter out logs hidden (deleted) by admin
+        logs = logs.where((doc) => (doc.data() as Map)['isHiddenFromAdmin'] != true).toList();
+
+        // Group logs by date for day-wise delete
+        final Map<String, List<QueryDocumentSnapshot>> byDay = {};
+        for (final doc in logs) {
+          final ts = (doc.data() as Map)['timestamp'] as Timestamp?;
+          final dayKey = ts != null ? DateFormat('yyyy-MM-dd').format(ts.toDate()) : 'Unknown';
+          byDay.putIfAbsent(dayKey, () => []).add(doc);
         }
 
         return Column(
           children: [
+            // ── Header ──────────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+              padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
               child: Row(
                 children: [
-                  const Text("All Logs",
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A1C1E))),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.download_rounded,
-                        color: Color(0xFF6A8A73)),
-                    tooltip: "Export CSV",
-                    onPressed: _exportLogsToCSV,
+                  Text(
+                    _selectionMode ? '${_selectedLogIds.length} selected' : 'All Logs',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _selectionMode ? AppTheme.kGreen : const Color(0xFF1A1C1E),
+                    ),
                   ),
+                  const Spacer(),
+                  if (_selectionMode) ...[
+                    // Delete selected
+                    TextButton.icon(
+                      onPressed: _selectedLogIds.isEmpty ? null : () => _deleteSelectedLogs(logs),
+                      icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                      label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    ),
+                    // Cancel
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.grey),
+                      onPressed: () => setState(() { _selectionMode = false; _selectedLogIds.clear(); }),
+                    ),
+                  ] else ...[
+                    // Select button
+                    IconButton(
+                      icon: const Icon(Icons.checklist_rounded, color: Color(0xFF6A8A73)),
+                      tooltip: 'Select logs',
+                      onPressed: () => setState(() => _selectionMode = true),
+                    ),
+                    // Delete menu
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+                      tooltip: 'Delete logs',
+                      onSelected: (val) => _handleDeleteOption(val, logs, byDay),
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'all', child: Row(children: [Icon(Icons.delete_forever, color: Colors.red, size: 18), SizedBox(width: 10), Text('Delete All Logs')])),
+                        const PopupMenuItem(value: 'day', child: Row(children: [Icon(Icons.today_outlined, color: Colors.orange, size: 18), SizedBox(width: 10), Text('Delete by Day')])),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.download_rounded, color: Color(0xFF6A8A73)),
+                      tooltip: 'Export CSV',
+                      onPressed: _exportLogsToCSV,
+                    ),
+                  ],
                 ],
               ),
             ),
 
-            // Class filter chips
+            // ── Class filter chips ───────────────────────────────────────────
             _buildClassFilterChips(),
-
             const SizedBox(height: 8),
 
+            // ── Log list ────────────────────────────────────────────────────
             Expanded(
               child: logs.isEmpty
-                  ? const Center(
-                      child: Text("No records found.",
-                          style: TextStyle(color: Colors.grey)))
+                  ? const Center(child: Text('No records found.', style: TextStyle(color: Colors.grey)))
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                       itemCount: logs.length,
                       itemBuilder: (context, index) {
                         final doc = logs[index];
                         final data = doc.data() as Map<String, dynamic>;
-                        return _buildGlobalLogCard(data);
+                        final isSelected = _selectedLogIds.contains(doc.id);
+                        return GestureDetector(
+                          onLongPress: () => setState(() {
+                            _selectionMode = true;
+                            _selectedLogIds.add(doc.id);
+                          }),
+                          onTap: _selectionMode
+                              ? () => setState(() {
+                                    if (isSelected) _selectedLogIds.remove(doc.id);
+                                    else _selectedLogIds.add(doc.id);
+                                  })
+                              : null,
+                          child: Stack(
+                            children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: isSelected
+                                      ? Border.all(color: AppTheme.kGreen, width: 2)
+                                      : null,
+                                  color: isSelected ? AppTheme.kGreen.withValues(alpha: 0.05) : null,
+                                ),
+                                child: _buildGlobalLogCard(data),
+                              ),
+                              if (_selectionMode)
+                                Positioned(
+                                  top: 8, right: 8,
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 150),
+                                    child: Icon(
+                                      isSelected ? Icons.check_circle : Icons.circle_outlined,
+                                      key: ValueKey(isSelected),
+                                      color: isSelected ? AppTheme.kGreen : Colors.grey.shade400,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
                       },
                     ),
             ),
@@ -684,6 +833,103 @@ class _AdminHomePageState extends State<AdminHomePage> {
         );
       },
     );
+  }
+
+  Future<void> _deleteSelectedLogs(List<QueryDocumentSnapshot> allLogs) async {
+    final toDelete = allLogs.where((d) => _selectedLogIds.contains(d.id)).toList();
+    final confirm = await _confirmDelete('Delete ${toDelete.length} selected log(s)?');
+    if (!confirm) return;
+    final batch = FirebaseFirestore.instance.batch();
+    for (final doc in toDelete) {
+      batch.update(doc.reference, {'isHiddenFromAdmin': true});
+    }
+    await batch.commit();
+    setState(() { _selectionMode = false; _selectedLogIds.clear(); });
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logs deleted.')));
+  }
+
+  Future<void> _handleDeleteOption(
+    String option,
+    List<QueryDocumentSnapshot> logs,
+    Map<String, List<QueryDocumentSnapshot>> byDay,
+  ) async {
+    if (option == 'all') {
+      final confirm = await _confirmDelete('Delete ALL ${logs.length} logs? This cannot be undone.');
+      if (!confirm) return;
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in logs) {
+        batch.update(doc.reference, {'isHiddenFromAdmin': true});
+      }
+      await batch.commit();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All logs deleted.')));
+    } else if (option == 'day') {
+      _showDeleteByDayDialog(byDay);
+    }
+  }
+
+  void _showDeleteByDayDialog(Map<String, List<QueryDocumentSnapshot>> byDay) {
+    final days = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          const Text('Delete by Day', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: days.length,
+              itemBuilder: (ctx, i) {
+                final day = days[i];
+                final count = byDay[day]!.length;
+                final label = DateFormat('EEE, MMM dd yyyy').format(DateTime.parse(day));
+                return ListTile(
+                  leading: const Icon(Icons.today_outlined, color: Colors.orange),
+                  title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: Text('$count log${count > 1 ? "s" : ""}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final confirm = await _confirmDelete('Delete $count log(s) for $label?');
+                    if (!confirm) return;
+                    final batch = FirebaseFirestore.instance.batch();
+                    for (final doc in byDay[day]!) {
+                      batch.update(doc.reference, {'isHiddenFromAdmin': true});
+                    }
+                    await batch.commit();
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deleted $count log(s) for $label.')));
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _confirmDelete(String message) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, minimumSize: const Size(80, 40)),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ) ?? false;
   }
 
   Widget _buildClassFilterChips() {
@@ -861,6 +1107,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     ];
     for (var doc in logsSnapshot.docs) {
       final d = doc.data();
+      if (d['isHiddenFromAdmin'] == true) continue;
       final DateTime dt = d['timestamp'] != null
           ? (d['timestamp'] as Timestamp).toDate()
           : DateTime.now();

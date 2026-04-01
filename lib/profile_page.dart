@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'app_theme.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  final String username;
+  const ProfilePage({super.key, required this.username});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -12,6 +14,12 @@ class _ProfilePageState extends State<ProfilePage> {
   final _usernameController = TextEditingController();
   final _newPasswordController = TextEditingController();
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameController.text = widget.username;
+  }
 
   Future<void> _updateProfile() async {
     if (_usernameController.text.isEmpty || _newPasswordController.text.isEmpty) {
@@ -42,56 +50,63 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  InputDecoration _modernInput(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, color: const Color(0xFF6A8A73)),
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101010),
+      backgroundColor: AppTheme.kDark,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: Colors.white),
-        title: const Text("Profile Settings", style: TextStyle(color: Colors.white)),
+        title: const Text("Profile Settings"),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            Container(
+      body: Column(
+        children: [
+          const SizedBox(height: 20),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: AppTheme.bottomSheet,
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(20)),
-              child: Column(
-                children: [
-                  const Icon(Icons.lock_reset, size: 50, color: Color(0xFF6A8A73)),
-                  const SizedBox(height: 20),
-                  TextField(controller: _usernameController, decoration: _modernInput("Confirm Username", Icons.person)),
-                  const SizedBox(height: 16),
-                  TextField(controller: _newPasswordController, obscureText: true, decoration: _modernInput("New Password", Icons.lock)),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      onPressed: _isLoading ? null : _updateProfile,
-                      child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("Update Password", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    AppTheme.sheetHandle,
+                    const Icon(Icons.shield_outlined, size: 60, color: AppTheme.kGreen),
+                    const SizedBox(height: 16),
+                    Text(
+                      widget.username,
+                      style: AppTheme.sectionTitle.copyWith(fontSize: 22),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      "Security Center",
+                      textAlign: TextAlign.center,
+                      style: AppTheme.subheadingGrey,
+                    ),
+                    const SizedBox(height: 32),
+                    TextField(
+                      controller: _usernameController,
+                      decoration: AppTheme.inputDecoration("Confirm Username", Icons.person_outline),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _newPasswordController,
+                      obscureText: true,
+                      decoration: AppTheme.inputDecoration("New Password", Icons.lock_outline),
+                    ),
+                    const SizedBox(height: 40),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _updateProfile,
+                      child: _isLoading 
+                        ? const CircularProgressIndicator(color: Colors.white) 
+                        : const Text("Save Changes"),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

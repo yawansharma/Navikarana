@@ -5,8 +5,10 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-const _kGreen = Color(0xFF6A8A73);
+
 
 // =============================================================================
 // CommunityPage — entry point, two tabs: Channel + Direct Messages
@@ -36,64 +38,63 @@ class CommunityPage extends StatelessWidget {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          foregroundColor: Colors.white,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new),
+            icon: const Icon(Icons.arrow_back_ios_new, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Community",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-              Text(className,
-                  style: const TextStyle(fontSize: 11, color: Colors.white60)),
+              Text("Community", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+              Text(className, style: GoogleFonts.poppins(fontSize: 11, color: Colors.white60)),
             ],
           ),
-          bottom: const TabBar(
-            indicatorColor: _kGreen,
-            labelColor: _kGreen,
-            unselectedLabelColor: Colors.grey,
-            labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            tabs: [
-              Tab(icon: Icon(Icons.forum_outlined, size: 18), text: "Channel"),
-              Tab(
-                  icon: Icon(Icons.mail_outline, size: 18),
-                  text: "Direct Messages"),
+          bottom: TabBar(
+            indicatorColor: AppTheme.kGreen,
+            indicatorWeight: 3,
+            labelColor: AppTheme.kGreen,
+            unselectedLabelColor: Colors.grey.shade500,
+            labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13),
+            unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 13),
+            tabs: const [
+              Tab(text: "CHANNEL"),
+              Tab(text: "DIRECT MESSAGES"),
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            // ── Tab 0: Public class channel ──────────────────────────────────
-            _ChatView(
-              messagesRef: FirebaseFirestore.instance
-                  .collection('community')
-                  .doc(classId)
-                  .collection('channel_messages'),
-              classId: classId,
-              username: username,
-              isAdmin: isAdmin,
-              showSenderName: true,
-            ),
-            // ── Tab 1: Direct Messages ───────────────────────────────────────
-            isAdmin
-                ? _AdminDmListTab(
-                    classId: classId,
-                    adminName: username,
-                    studentIds: studentIds,
-                  )
-                : _ChatView(
-                    messagesRef: FirebaseFirestore.instance
-                        .collection('community')
-                        .doc(classId)
-                        .collection('dm_$username'),
-                    classId: classId,
-                    username: username,
-                    isAdmin: false,
-                    showSenderName: false,
-                  ),
-          ],
+        body: RisingSheet(
+          child: TabBarView(
+            children: [
+              // ── Tab 0: Public class channel ──────────────────────────────────
+              _ChatView(
+                messagesRef: FirebaseFirestore.instance
+                    .collection('community')
+                    .doc(classId)
+                    .collection('channel_messages'),
+                classId: classId,
+                username: username,
+                isAdmin: isAdmin,
+                showSenderName: true,
+              ),
+              // ── Tab 1: Direct Messages ───────────────────────────────────────
+              isAdmin
+                  ? _AdminDmListTab(
+                      classId: classId,
+                      adminName: username,
+                      studentIds: studentIds,
+                    )
+                  : _ChatView(
+                      messagesRef: FirebaseFirestore.instance
+                          .collection('community')
+                          .doc(classId)
+                          .collection('dm_$username'),
+                      classId: classId,
+                      username: username,
+                      isAdmin: false,
+                      showSenderName: false,
+                    ),
+            ],
+          ),
         ),
       ),
     );
@@ -213,7 +214,7 @@ class _ChatViewState extends State<_ChatView> {
               builder: (context, snap) {
                 if (!snap.hasData) {
                   return const Center(
-                      child: CircularProgressIndicator(color: _kGreen));
+                      child: CircularProgressIndicator(color: AppTheme.kGreen));
                 }
                 final docs = snap.data!.docs;
                 if (docs.isEmpty) {
@@ -304,30 +305,37 @@ class _AdminDmListTab extends StatelessWidget {
                 final d = snap.data!.data() as Map<String, dynamic>?;
                 name = d?['name'] as String? ?? studentId;
               }
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: _kGreen.withValues(alpha: 0.15),
-                  child: Text(
-                    name[0].toUpperCase(),
-                    style: const TextStyle(
-                        color: _kGreen, fontWeight: FontWeight.bold),
-                  ),
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
+                  ],
                 ),
-                title: Text(name,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(studentId,
-                    style:
-                        const TextStyle(fontSize: 12, color: Colors.grey)),
-                trailing:
-                    const Icon(Icons.chevron_right, color: Colors.grey),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => _DmThreadPage(
-                      classId: classId,
-                      studentId: studentId,
-                      studentName: name,
-                      adminName: adminName,
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppTheme.kGreen.withValues(alpha: 0.1),
+                    child: Text(
+                      name[0].toUpperCase(),
+                      style: GoogleFonts.poppins(color: AppTheme.kGreen, fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                  ),
+                  title: Text(name, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15)),
+                  subtitle: Text("@$studentId", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade500)),
+                  trailing: Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey.shade300, size: 16),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => _DmThreadPage(
+                        classId: classId,
+                        studentId: studentId,
+                        studentName: name,
+                        adminName: adminName,
+                      ),
                     ),
                   ),
                 ),
@@ -435,19 +443,19 @@ class _MessageBubble extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: _kGreen)),
+                          color: AppTheme.kGreen)),
                   if (isAdmin) ...[
                     const SizedBox(width: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
-                          color: _kGreen.withValues(alpha: 0.15),
+                          color: AppTheme.kGreen.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4)),
                       child: const Text("Admin",
                           style: TextStyle(
                               fontSize: 9,
-                              color: _kGreen,
+                              color: AppTheme.kGreen,
                               fontWeight: FontWeight.bold)),
                     ),
                   ],
@@ -463,13 +471,13 @@ class _MessageBubble extends StatelessWidget {
                 CircleAvatar(
                   radius: 14,
                   backgroundColor: isAdmin
-                      ? _kGreen.withValues(alpha: 0.2)
+                      ? AppTheme.kGreen.withValues(alpha: 0.2)
                       : Colors.grey.shade200,
                   child: Text(
                     senderId.isNotEmpty ? senderId[0].toUpperCase() : '?',
                     style: TextStyle(
                         fontSize: 11,
-                        color: isAdmin ? _kGreen : Colors.grey.shade600,
+                        color: isAdmin ? AppTheme.kGreen : Colors.grey.shade600,
                         fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -480,13 +488,28 @@ class _MessageBubble extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: isMine ? _kGreen : Colors.grey.shade100,
+                    gradient: isMine 
+                      ? const LinearGradient(
+                          colors: [AppTheme.kGreen, Color(0xFF5A7A63)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                    color: isMine ? null : const Color(0xFFF1F4F2),
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isMine ? 16 : 4),
-                      bottomRight: Radius.circular(isMine ? 4 : 16),
+                      topLeft: const Radius.circular(20),
+                      topRight: const Radius.circular(20),
+                      bottomLeft: Radius.circular(isMine ? 20 : 4),
+                      bottomRight: Radius.circular(isMine ? 4 : 20),
                     ),
+                    boxShadow: [
+                      if (isMine)
+                        BoxShadow(
+                          color: AppTheme.kGreen.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -670,7 +693,7 @@ class _InputBar extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.attach_file, color: _kGreen),
+            icon: const Icon(Icons.attach_file, color: AppTheme.kGreen),
             onPressed: sending ? null : onAttach,
             tooltip: "Attach file",
           ),
@@ -699,7 +722,7 @@ class _InputBar extends StatelessWidget {
                   child: Padding(
                     padding: EdgeInsets.all(8),
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: _kGreen),
+                        strokeWidth: 2, color: AppTheme.kGreen),
                   ))
               : GestureDetector(
                   onTap: onSend,
@@ -707,7 +730,7 @@ class _InputBar extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: const BoxDecoration(
-                        color: _kGreen, shape: BoxShape.circle),
+                        color: AppTheme.kGreen, shape: BoxShape.circle),
                     child: const Icon(Icons.send,
                         color: Colors.white, size: 18),
                   ),

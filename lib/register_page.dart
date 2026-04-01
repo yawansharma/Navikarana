@@ -7,6 +7,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'home_page.dart';
+import 'app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -15,12 +17,13 @@ class RegisterPage extends StatefulWidget {
   State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage>
-    with SingleTickerProviderStateMixin {
+class _RegisterPageState extends State<RegisterPage> {
   final nameController = TextEditingController();
   final uniqueCodeController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
+  bool _isObscure = true;
+  bool _isConfirmObscure = true;
 
   // Selection state
   String? _selectedSchool;
@@ -44,16 +47,10 @@ class _RegisterPageState extends State<RegisterPage>
   static const String _backendBaseUrl = "https://pasteshub-navikarana-backend.hf.space";
   static const String _registerFaceEndpoint = "$_backendBaseUrl/register-face";
 
-  late AnimationController _controller;
-  late Animation<double> _fadeAnim;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800));
-    _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-    _controller.forward();
   }
 
   // --- NEW UX: BOTTOM SHEET SELECTOR ---
@@ -89,9 +86,9 @@ class _RegisterPageState extends State<RegisterPage>
                       title: Text(school, style: TextStyle(
                         fontSize: 14, 
                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? const Color(0xFF6A8A73) : Colors.black87
+                        color: isSelected ? AppTheme.kGreen : Colors.black87
                       )),
-                      trailing: isSelected ? const Icon(Icons.check_circle, color: Color(0xFF6A8A73)) : null,
+                      trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.kGreen) : null,
                       onTap: () {
                         setState(() => _selectedSchool = school);
                         Navigator.pop(context);
@@ -208,7 +205,6 @@ class _RegisterPageState extends State<RegisterPage>
 
   @override
   void dispose() {
-    _controller.dispose();
     nameController.dispose();
     uniqueCodeController.dispose();
     passwordController.dispose();
@@ -216,79 +212,181 @@ class _RegisterPageState extends State<RegisterPage>
     super.dispose();
   }
 
-  InputDecoration _modernInput(String label, IconData icon, {bool isDropdown = false}) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-      prefixIcon: Icon(icon, color: const Color(0xFF6A8A73)),
-      suffixIcon: isDropdown ? const Icon(Icons.arrow_drop_down_rounded, color: Colors.grey) : null,
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade300)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF6A8A73), width: 2)),
+  // --- REUSABLE UI TILES ---
+  Widget _sectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, bottom: 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: AppTheme.labelSmall.copyWith(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ),
     );
   }
+
+  Widget _actionTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool isSet = false,
+    bool isLoading = false,
+  }) {
+    return InkWell(
+      onTap: isLoading ? null : onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: isSet ? AppTheme.kGreen : AppTheme.kBorder, width: 1.5),
+          borderRadius: BorderRadius.circular(16),
+          color: isSet ? AppTheme.kGreen.withValues(alpha: 0.05) : Colors.white,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSet ? AppTheme.kGreen : Colors.grey, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: isSet ? FontWeight.bold : FontWeight.w500,
+                  color: isSet ? AppTheme.kGreen : Colors.grey.shade700,
+                ),
+              ),
+            ),
+            if (isLoading)
+              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.kGreen))
+            else if (isSet)
+              const Icon(Icons.check_circle_rounded, color: AppTheme.kGreen, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101010),
+      backgroundColor: AppTheme.kDark,
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).pop())),
-      body: FadeTransition(
-        opacity: _fadeAnim,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 10, 24, 30),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text("Go ahead and set up\nyour account", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, height: 1.2)),
-                SizedBox(height: 10),
-                Text("Sign in-up to enjoy the best managing experience", style: TextStyle(color: Colors.grey, fontSize: 14))
-              ])),
-            Expanded(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text("Go ahead and set up\nyour account", style: AppTheme.headingWhite.copyWith(fontSize: 28, height: 1.2)),
+              const SizedBox(height: 10),
+              Text("Create your account to enjoy the best managing experience", style: AppTheme.subheadingGrey)
+            ])),
+          Expanded(
+            child: RisingSheet(
               child: Container(
                 width: double.infinity,
-                decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+                decoration: AppTheme.bottomSheet,
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
                   child: Column(children: [
-                    Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
-                    TextFormField(controller: nameController, decoration: _modernInput("Full Name", Icons.person_outline)),
+                    AppTheme.sheetHandle,
+                    _sectionTitle("BASIC INFORMATION"),
+                    TextFormField(
+                      controller: nameController, 
+                      textInputAction: TextInputAction.next,
+                      decoration: AppTheme.inputDecoration("Full Name", Icons.person_outline)
+                    ),
                     const SizedBox(height: 16),
-                    TextFormField(controller: uniqueCodeController, decoration: _modernInput("Unique ID", Icons.badge_outlined)),
+                    TextFormField(
+                      controller: uniqueCodeController, 
+                      textInputAction: TextInputAction.next,
+                      decoration: AppTheme.inputDecoration("Unique ID", Icons.badge_outlined)
+                    ),
                     const SizedBox(height: 16),
 
-                    // POLISHED SELECTION UX
                     GestureDetector(
                       onTap: _showSchoolPicker,
                       child: AbsorbPointer(
                         child: TextFormField(
-                          decoration: _modernInput(
+                          decoration: AppTheme.inputDecoration(
                             _selectedSchool ?? "Select School", 
                             Icons.school_outlined, 
                             isDropdown: true
                           ),
-                          style: TextStyle(color: _selectedSchool == null ? Colors.grey : Colors.black),
+                          style: GoogleFonts.poppins(color: _selectedSchool == null ? Colors.grey : Colors.black, fontSize: 14),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    TextFormField(controller: passwordController, obscureText: true, decoration: _modernInput("Password", Icons.lock_outline)),
-                    const SizedBox(height: 16),
-                    TextFormField(controller: confirmPasswordController, obscureText: true, decoration: _modernInput("Confirm Password", Icons.lock_reset)),
-                    const SizedBox(height: 16),
-                    GestureDetector(onTap: _pickPhoto, child: AbsorbPointer(child: TextFormField(decoration: _modernInput("Add a photo", Icons.camera_alt_outlined)))),
+                    
+                    _sectionTitle("IDENTITY CHECK"),
+                    _actionTile(
+                      icon: Icons.camera_alt_outlined,
+                      label: _localPhoto != null ? "Photo Captured" : "Add Profile Photo",
+                      onTap: _pickPhoto,
+                      isSet: _localPhoto != null,
+                    ),
                     if (_localPhoto != null) ...[
-                      const SizedBox(height: 16),
-                      ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_localPhoto!, height: 150, width: double.infinity, fit: BoxFit.cover))
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.file(_localPhoto!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                      ),
                     ],
                     const SizedBox(height: 16),
-                    GestureDetector(onTap: _getCurrentLocation, child: AbsorbPointer(child: TextFormField(decoration: _modernInput(_fetchingLocation ? "Fetching location..." : (latitude != null ? "Location Set" : "Get location"), Icons.location_on_outlined)))),
-                    const SizedBox(height: 32),
-                    SizedBox(width: double.infinity, height: 55, child: ElevatedButton(onPressed: _registeringFace ? null : _onRegisterPressed, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), child: _registeringFace ? const CircularProgressIndicator(color: Colors.white) : const Text("Register", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)))),
+                    _actionTile(
+                      icon: Icons.location_on_outlined,
+                      label: latitude != null ? "Location Verified" : "Capture Location",
+                      onTap: _getCurrentLocation,
+                      isLoading: _fetchingLocation,
+                      isSet: latitude != null,
+                    ),
+
+                    _sectionTitle("SECURITY"),
+                    TextFormField(
+                      controller: passwordController, 
+                      obscureText: _isObscure, 
+                      decoration: AppTheme.inputDecoration(
+                        "Password", 
+                        Icons.lock_outline,
+                        suffix: IconButton(
+                          icon: Icon(_isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey, size: 20),
+                          onPressed: () => setState(() => _isObscure = !_isObscure),
+                        ),
+                      )
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: confirmPasswordController, 
+                      obscureText: _isConfirmObscure, 
+                      decoration: AppTheme.inputDecoration(
+                        "Confirm Password", 
+                        Icons.lock_reset,
+                        suffix: IconButton(
+                          icon: Icon(_isConfirmObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey, size: 20),
+                          onPressed: () => setState(() => _isConfirmObscure = !_isConfirmObscure),
+                        ),
+                      )
+                    ),
+                    
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: double.infinity, 
+                      height: 55, 
+                      child: ElevatedButton(
+                        onPressed: _registeringFace ? null : _onRegisterPressed, 
+                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.kGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                        child: _registeringFace 
+                          ? const CircularProgressIndicator(color: Colors.white) 
+                          : const Text("Register Account", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white))
+                      )
+                    ),
                     
                     // ---------------------------------------------------------------------------
                     // PROFESSIONAL LOGO FOOTER WITH PNG TINT & GLOW
@@ -341,8 +439,8 @@ class _RegisterPageState extends State<RegisterPage>
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

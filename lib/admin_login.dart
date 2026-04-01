@@ -2,6 +2,7 @@ import 'dart:math'; // For Random Captcha
 import 'package:flutter/material.dart';
 import 'admin_home_page.dart'; 
 import 'main.dart'; // Import main to navigate back to User Login
+import 'app_theme.dart';
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -14,6 +15,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
   final usernameController = TextEditingController();
   final passwordController = TextEditingController();
   final captchaController = TextEditingController();
+  bool _isObscure = true;
 
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
@@ -83,30 +85,12 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     }
   }
 
-  // UI Helper (Matches User Login Style)
-  InputDecoration _modernInput(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-      prefixIcon: Icon(icon, color: const Color(0xFF6A8A73), size: 20),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.grey.shade200), // Lighter border to match main
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFF6A8A73), width: 2),
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101010),
+      backgroundColor: AppTheme.kDark,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -148,26 +132,19 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
             ),
 
             // 2. TITLE SECTION (Polished Typography)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
+             Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                   Text(
                     "Administrator Access",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppTheme.headingWhite,
                   ),
-                  SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: 8),
+                   Text(
                     "Please authenticate to manage the system.",
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontSize: 15,
-                    ),
+                    style: AppTheme.subheadingGrey,
                   ),
                 ],
               ),
@@ -182,39 +159,36 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                   position: _slideAnim,
                   child: Container(
                     width: double.infinity,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF8F9FB), // Matched background color to main.dart
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(35),
-                        topRight: Radius.circular(35),
-                      ),
-                    ),
+                    decoration: AppTheme.bottomSheet,
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          Center(
-                            child: Container(
-                              width: 40,
-                              height: 4,
-                              margin: const EdgeInsets.only(bottom: 30),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade300,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ),
+                          AppTheme.sheetHandle,
 
                           // Inputs
                           TextFormField(
                             controller: usernameController,
-                            decoration: _modernInput("Admin ID", Icons.admin_panel_settings_outlined),
+                            textInputAction: TextInputAction.next,
+                            decoration: AppTheme.inputDecoration("Admin ID", Icons.admin_panel_settings_outlined),
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: passwordController,
-                            obscureText: true,
-                            decoration: _modernInput("Password", Icons.lock_outline),
+                            obscureText: _isObscure,
+                            textInputAction: TextInputAction.next,
+                            decoration: AppTheme.inputDecoration(
+                              "Password", 
+                              Icons.lock_outline,
+                              suffix: IconButton(
+                                icon: Icon(
+                                  _isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
+                                onPressed: () => setState(() => _isObscure = !_isObscure),
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 24),
 
@@ -281,7 +255,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                       ),
                                       child: IconButton(
                                         onPressed: _generateCaptcha,
-                                        icon: const Icon(Icons.refresh_rounded, color: Color(0xFF6A8A73)),
+                                        icon: const Icon(Icons.refresh_rounded, color: AppTheme.kGreen),
                                         tooltip: "Refresh Captcha",
                                       ),
                                     ),
@@ -290,7 +264,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                 const SizedBox(height: 16),
                                 TextFormField(
                                   controller: captchaController,
-                                  decoration: _modernInput("Enter Captcha", Icons.security),
+                                  textInputAction: TextInputAction.done,
+                                  onFieldSubmitted: (_) => _login(),
+                                  decoration: AppTheme.inputDecoration("Enter Captcha", Icons.security),
                                 ),
                               ],
                             ),
@@ -305,7 +281,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                             child: ElevatedButton(
                               onPressed: _login,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF6A8A73),
+                                backgroundColor: AppTheme.kGreen,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
@@ -368,7 +344,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                               ),
                             ),
                           ),
-                          const SizedBox(height: 80), // Clear bottom of screen
+                          const SizedBox(height: 40), // Clear bottom of screen
                         ],
                       ),
                     ),

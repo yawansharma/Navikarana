@@ -2,40 +2,44 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'class_detail_page.dart';
 import 'main.dart';
+import 'app_theme.dart';
+import 'profile_page.dart';
 
 class HomePage extends StatelessWidget {
   final String name;
   final String username;
 
-  const HomePage({
-    super.key,
-    required this.name,
-    required this.username,
-  });
+  const HomePage({super.key, required this.name, required this.username});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101010), // Charcoal Background
+      backgroundColor: AppTheme.kDark,
       appBar: AppBar(
         title: const Text("Dashboard"),
         centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          icon: const Icon(Icons.logout),
           tooltip: "Logout",
           onPressed: () {
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => const LoginPage()),
-              (route) => false, // Remove all previous routes
+              (route) => false,
             );
           },
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: "Profile",
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage(username: username))),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
@@ -48,18 +52,14 @@ class HomePage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         "Welcome back,",
-                        style: TextStyle(color: Colors.grey, fontSize: 16),
+                        style: AppTheme.subheadingGrey,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: AppTheme.headingWhite,
                       ),
                     ],
                   ),
@@ -72,138 +72,175 @@ class HomePage extends StatelessWidget {
 
           // White Container
           Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    // Pull Handle Visual
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 24),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(2),
+            child: RisingSheet(
+              child: Container(
+                width: double.infinity,
+                decoration: AppTheme.bottomSheet,
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('classes')
+                    .where('studentIds', arrayContains: username)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: AppTheme.kGreen,
+                      ),
+                    );
+                  }
+
+                  final classDocs = snapshot.data!.docs;
+
+                  if (classDocs.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          AppTheme.sheetHandle,
+                          const Spacer(),
+                          Icon(Icons.school_outlined, size: 80, color: Colors.grey.shade300),
+                          const SizedBox(height: 24),
+                          Text("No Classes Joined", style: AppTheme.sectionTitle),
+                          const SizedBox(height: 8),
+                          Text(
+                            "You haven't joined any classes yet.\nJoin one to start tracking attendance.",
+                            textAlign: TextAlign.center,
+                            style: AppTheme.subheadingGrey,
+                          ),
+                          const SizedBox(height: 32),
+                          SizedBox(
+                            width: 160,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _showJoinClassDialog(context),
+                              icon: const Icon(Icons.add_circle_outline, size: 20),
+                              label: const Text("Join Now"),
+                            ),
+                          ),
+                          const Spacer(),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return CustomScrollView(
+                    slivers: [
+                      // Sheet handle
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                          child: AppTheme.sheetHandle,
                         ),
                       ),
-                    ),
 
-                    Expanded(
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('classes')
-                            .where('studentIds', arrayContains: username)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF6A8A73),
-                              ),
-                            );
-                          }
+                      // Today's Sessions banner
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: _ActivePeriodsBanner(
+                            classDocs: classDocs,
+                            username: username,
+                          ),
+                        ),
+                      ),
 
-                          final classDocs = snapshot.data!.docs;
-
-                          if (classDocs.isEmpty) {
-                            return Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text("Your Classes", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                    ElevatedButton.icon(
-                                      onPressed: () => _showJoinClassDialog(context),
-                                      icon: const Icon(Icons.add, size: 16),
-                                      label: const Text("Join"),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF6A8A73),
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 30),
-                                const Text("You haven't joined any classes yet.", style: TextStyle(color: Colors.grey)),
-                              ],
-                            );
-                          }
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      // "Your Classes" header + Join button
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              _ActivePeriodsBanner(classDocs: classDocs, username: username),
-                              const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text("Your Classes", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                  ElevatedButton.icon(
-                                    onPressed: () => _showJoinClassDialog(context),
-                                    icon: const Icon(Icons.add, size: 16),
-                                    label: const Text("Join"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF6A8A73),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
+                              Text("Your Classes", style: AppTheme.sectionTitle),
+                              ElevatedButton.icon(
+                                onPressed: () => _showJoinClassDialog(context),
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text("Join"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.kGreen,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(80, 36),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Expanded(
-                                child: ListView.builder(
-                                  itemCount: classDocs.length,
-                                  itemBuilder: (context, index) {
-                                    final doc = classDocs[index];
-                                    final data = doc.data() as Map<String, dynamic>;
-                                    return Card(
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                      elevation: 0,
-                                      color: const Color(0xFFF9FAFB),
-                                      child: ListTile(
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                        leading: const CircleAvatar(
-                                          backgroundColor: Color(0xFFF1F4F2),
-                                          child: Icon(Icons.class_, color: Color(0xFF6A8A73)),
-                                        ),
-                                        title: Text(data['className'] ?? "Unknown Class", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        subtitle: Text("Code: ${data['classCode'] ?? 'Unknown'}"),
-                                        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                                        onTap: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => ClassDetailPage(
-                                                classId: doc.id,
-                                                className: data['className'] ?? 'Class',
-                                                boundary: data['boundary'] as Map<String, dynamic>?,
-                                                username: username,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    );
-                                  },
                                 ),
                               ),
                             ],
-                          );
-                        },
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+
+                      // Class list
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final doc = classDocs[index];
+                              final data = doc.data() as Map<String, dynamic>;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: IntrinsicHeight(
+                                    child: Row(
+                                      children: [
+                                        Container(width: 5, color: AppTheme.kGreen),
+                                        Expanded(
+                                          child: ListTile(
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                            title: Text(
+                                              data['className'] ?? "Unknown Class",
+                                              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15),
+                                            ),
+                                            subtitle: Padding(
+                                              padding: const EdgeInsets.only(top: 4),
+                                              child: Text(
+                                                "Code: ${data['classCode'] ?? 'Unknown'}",
+                                                style: AppTheme.labelSmall,
+                                              ),
+                                            ),
+                                            trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+                                            onTap: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) => ClassDetailPage(
+                                                    classId: doc.id,
+                                                    className: data['className'] ?? 'Class',
+                                                    boundary: data['boundary'] as Map<String, dynamic>?,
+                                                    username: username,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            childCount: classDocs.length,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
               ),
             ),
           ),
@@ -283,10 +320,7 @@ class _ActivePeriodsBanner extends StatefulWidget {
   final List<QueryDocumentSnapshot> classDocs;
   final String username;
 
-  const _ActivePeriodsBanner({
-    required this.classDocs,
-    required this.username,
-  });
+  const _ActivePeriodsBanner({required this.classDocs, required this.username});
 
   @override
   State<_ActivePeriodsBanner> createState() => _ActivePeriodsBannerState();
@@ -333,22 +367,22 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
           .where('date', isEqualTo: todayStr)
           .snapshots()
           .listen((snap) {
-        if (!mounted) return;
-        List<Map<String, dynamic>> periods = [];
-        for (var doc in snap.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          periods.add({
-            'id': doc.id,
-            'classId': classId,
-            'className': className,
-            'boundary': boundary,
-            ...data,
+            if (!mounted) return;
+            List<Map<String, dynamic>> periods = [];
+            for (var doc in snap.docs) {
+              final data = doc.data() as Map<String, dynamic>;
+              periods.add({
+                'id': doc.id,
+                'classId': classId,
+                'className': className,
+                'boundary': boundary,
+                ...data,
+              });
+            }
+            setState(() {
+              _periodsMap[classId] = periods;
+            });
           });
-        }
-        setState(() {
-          _periodsMap[classId] = periods;
-        });
-      });
       _subs.add(sub);
     }
   }
@@ -387,11 +421,24 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text("Today's Classes", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              "Today's Classes",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-              child: Text("${allPeriods.length} Sessions", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                "${allPeriods.length} Sessions",
+                style: const TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
             ),
           ],
         ),
@@ -406,21 +453,28 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
               final period = allPeriods[index];
               final startTs = period['startTime'] as Timestamp?;
               final endTs = period['endTime'] as Timestamp?;
-              
-              if (startTs == null || endTs == null) return const SizedBox.shrink();
+
+              if (startTs == null || endTs == null)
+                return const SizedBox.shrink();
 
               final realStart = startTs.toDate();
               final realEnd = endTs.toDate();
 
-              final reportStart = realStart.subtract(const Duration(minutes: 10));
+              final reportStart = realStart.subtract(
+                const Duration(minutes: 10),
+              );
               final reportEnd = realEnd.add(const Duration(minutes: 10));
 
               bool isUpcoming = now.isBefore(reportStart);
               bool isPast = now.isAfter(reportEnd);
               bool isActive = !isUpcoming && !isPast;
 
-              Color accentColor = isActive ? Colors.green : (isUpcoming ? Colors.orange : Colors.grey);
-              String statusText = isActive ? "Active Now" : (isUpcoming ? "Upcoming" : "Ended");
+              Color accentColor = isActive
+                  ? Colors.green
+                  : (isUpcoming ? Colors.orange : Colors.grey);
+              String statusText = isActive
+                  ? "Active Now"
+                  : (isUpcoming ? "Upcoming" : "Ended");
 
               return Container(
                 width: 200,
@@ -436,15 +490,41 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
                   children: [
                     Row(
                       children: [
-                        Icon(isActive ? Icons.sensors : Icons.access_time_filled, color: accentColor, size: 16),
+                        Icon(
+                          isActive ? Icons.sensors : Icons.access_time_filled,
+                          color: accentColor,
+                          size: 16,
+                        ),
                         const SizedBox(width: 6),
-                        Text(statusText, style: TextStyle(color: accentColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text(
+                          statusText,
+                          style: TextStyle(
+                            color: accentColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text(period['className'] ?? "Unknown Class", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      period['className'] ?? "Unknown Class",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
-                    Text("${DateFormat('hh:mm a').format(realStart)} - ${DateFormat('hh:mm a').format(realEnd)}", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                    Text(
+                      "${DateFormat('hh:mm a').format(realStart)} - ${DateFormat('hh:mm a').format(realEnd)}",
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
                     const Spacer(),
                     if (isActive)
                       SizedBox(
@@ -468,12 +548,20 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
                             backgroundColor: accentColor,
                             foregroundColor: Colors.white,
                             padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             elevation: 0,
                           ),
-                          child: const Text("Open to Report", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            "Open to Report",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      )
+                      ),
                   ],
                 ),
               );

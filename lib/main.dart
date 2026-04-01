@@ -8,6 +8,7 @@ import 'firebase_options.dart';
 import 'home_page.dart';
 import 'register_page.dart';
 import 'admin_login.dart';
+import 'app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,9 +23,10 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: SplashScreen(), // Changed to start with Splash Screen
+      theme: AppTheme.light(),
+      home: const SplashScreen(),
     );
   }
 }
@@ -101,34 +103,26 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 228, 228, 228),
+      backgroundColor: Colors.white,
       body: Center(
         child: FadeTransition(
           opacity: _opacityAnimation,
           child: ScaleTransition(
             scale: _scaleAnimation,
             child: Container(
-              // --- PNG EFFECT: SOFT GLOW ---
               decoration: BoxDecoration(
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6A8A73).withValues(alpha: 0.2),
-                    blurRadius: 40,
-                    spreadRadius: 5,
+                    color: AppTheme.kGreen.withValues(alpha: 0.15),
+                    blurRadius: 60,
+                    spreadRadius: 10,
                   ),
                 ],
               ),
-              child: ColorFiltered(
-                // --- PNG EFFECT: SAGE TINT ---
-                colorFilter: ColorFilter.mode(
-                  const Color(0xFF6A8A73).withValues(alpha: 0.08), 
-                  BlendMode.srcATop,
-                ),
-                child: Image.asset(
-                  'assets/navikarnaNew.png',
-                  width: 250,
-                  fit: BoxFit.contain,
-                ),
+              child: Image.asset(
+                'assets/navikarnaNew.png',
+                width: 250,
+                fit: BoxFit.contain,
               ),
             ),
           ),
@@ -148,31 +142,18 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
-    with SingleTickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage> {
   final uniqueCodeController = TextEditingController();
   final passwordController = TextEditingController();
-
-  late AnimationController _controller;
-  late Animation<double> _fadeAnim;
-  late Animation<Offset> _slideAnim;
+  bool _isObscure = true;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800));
-    _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-    _controller.forward();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
     uniqueCodeController.dispose();
     passwordController.dispose();
     super.dispose();
@@ -272,30 +253,10 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 
-
-
-  InputDecoration _modernInput(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-      prefixIcon: Icon(icon, color: const Color(0xFF6A8A73), size: 20),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding:
-          const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-      enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.shade200)),
-      focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF6A8A73), width: 2)),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101010),
+      backgroundColor: AppTheme.kDark,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -332,67 +293,58 @@ class _LoginPageState extends State<LoginPage>
                 ],
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     "Welcome Back",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold),
+                    style: AppTheme.headingWhite,
                   ),
                   SizedBox(height: 8),
                   Text(
                     "Verify your unique code and identity.",
-                    style: TextStyle(color: Colors.grey, fontSize: 15),
+                    style: AppTheme.subheadingGrey,
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 30),
             Expanded(
-              child: FadeTransition(
-                opacity: _fadeAnim,
-                child: SlideTransition(
-                  position: _slideAnim,
-                  child: Container(
-                    width: double.infinity,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF8F9FB),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(35),
-                        topRight: Radius.circular(35),
-                      ),
-                    ),
+              child: RisingSheet(
+                child: Container(
+                  width: double.infinity,
+                  decoration: AppTheme.bottomSheet,
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          Center(
-                            child: Container(
-                              width: 40,
-                              height: 4,
-                              margin: const EdgeInsets.only(bottom: 30),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade300,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ),
+                          AppTheme.sheetHandle,
                           TextFormField(
                             controller: uniqueCodeController,
-                            decoration: _modernInput(
+                            textInputAction: TextInputAction.next,
+                            decoration: AppTheme.inputDecoration(
                                 "Unique Code", Icons.badge_outlined),
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: passwordController,
-                            obscureText: true,
-                            decoration:
-                                _modernInput("Password", Icons.lock_outline),
+                            obscureText: _isObscure,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _login(),
+                            decoration: AppTheme.inputDecoration(
+                              "Password", 
+                              Icons.lock_outline,
+                              suffix: IconButton(
+                                icon: Icon(
+                                  _isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
+                                onPressed: () => setState(() => _isObscure = !_isObscure),
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 40),
                           SizedBox(
@@ -401,7 +353,7 @@ class _LoginPageState extends State<LoginPage>
                             child: ElevatedButton(
                               onPressed: _login,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF6A8A73),
+                                backgroundColor: AppTheme.kGreen,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
@@ -434,7 +386,7 @@ class _LoginPageState extends State<LoginPage>
                                 child: const Text(
                                   "Register here",
                                   style: TextStyle(
-                                    color: Color(0xFF6A8A73),
+                                    color: AppTheme.kGreen,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -486,12 +438,11 @@ class _LoginPageState extends State<LoginPage>
                               ),
                             ),
                           ),
-                          const SizedBox(height: 80),
+                          const SizedBox(height: 40),
                         ],
                       ),
                     ),
                   ),
-                ),
               ),
             ),
           ],

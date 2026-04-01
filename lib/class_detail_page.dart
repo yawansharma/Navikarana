@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'community_page.dart';
+import 'app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ClassDetailPage extends StatefulWidget {
   final String classId;
@@ -241,7 +243,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       });
 
       if (mounted) Navigator.of(context).pop();
-      _showSnackBar(isWithinGeofence ? "Attendance reported! Awaiting admin review." : "Reported outside boundary. Admin will review.");
+      _showSuccessTicket(isWithinGeofence, entryStatus, activePeriod);
     } catch (e) {
       if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
       _showSnackBar("Something went wrong: $e");
@@ -250,24 +252,114 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
+  void _showSuccessTicket(bool inZone, String entryStatus, Map<String, dynamic> period) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        contentPadding: EdgeInsets.zero,
+        content: Container(
+          width: 320,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: const BoxDecoration(
+                  color: AppTheme.kGreen,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: const Center(
+                  child: Icon(Icons.check_circle_outline, color: Colors.white, size: 64),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text("Session ID: ${period['id'].toString().toUpperCase()}", 
+                         style: GoogleFonts.poppins(fontSize: 10, letterSpacing: 1, color: Colors.grey, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text("Attendance Logged", style: AppTheme.sectionTitle),
+                    const SizedBox(height: 24),
+                    _ticketRow("Class", widget.className),
+                    _ticketRow("Date", DateFormat('dd MMM yyyy').format(DateTime.now())),
+                    _ticketRow("Window", entryStatus),
+                    _ticketRow("Geofence", inZone ? "VERIFIED" : "OUTSIDE"),
+                    const SizedBox(height: 24),
+                    const Divider(height: 1, thickness: 1, color: Color(0xFFF1F4F2)),
+                    const SizedBox(height: 24),
+                    Text(
+                      inZone 
+                        ? "Your attendance has been sent for admin verification." 
+                        : "Reported outside boundary. Admin will manually review your status.",
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text("Done"),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _ticketRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey)),
+          Text(value, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+        ],
+      ),
+    );
+  }
+
   void _showProgressDialog(ValueNotifier<String> statusNotifier) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => WillPopScope(
-        onWillPop: () async => false,
+      builder: (_) => PopScope(
+        canPop: false,
         child: AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           content: ValueListenableBuilder<String>(
             valueListenable: statusNotifier,
-            builder: (_, value, __) => Row(
+            builder: (_, value, __) => Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: Color(0xFF6A8A73)),
-                const SizedBox(width: 20),
-                Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+                const CircularProgressIndicator(color: AppTheme.kGreen),
+                const SizedBox(height: 24),
+                Text(
+                  value, 
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Please keep the app open during this process.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                ),
               ],
             ),
           ),
@@ -305,9 +397,14 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: Colors.white,
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.pop(context)),
-        title: Text(widget.className, style: const TextStyle(fontWeight: FontWeight.bold)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 20), onPressed: () => Navigator.pop(context)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.className, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(widget.classId, style: GoogleFonts.poppins(fontSize: 11, color: Colors.white60)),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.forum_outlined),
@@ -395,9 +492,10 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
           ),
           const SizedBox(height: 20),
           Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+            child: RisingSheet(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -526,6 +624,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                     ),
                   ),
                 ],
+              ),
               ),
             ),
           ),

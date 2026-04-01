@@ -199,7 +199,7 @@ class _RegisterPageState extends State<RegisterPage>
     await _registerUserInFirestore();
     setState(() => _registeringFace = false);
     if (!mounted) return;
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(name: nameController.text.trim(), latitude: latitude!, longitude: longitude!, photo: _localPhoto)));
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(name: nameController.text.trim(), username: uniqueCodeController.text.trim())));
   }
 
   void _showSnackBar(String message) {

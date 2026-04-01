@@ -1,0 +1,563 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'community_page.dart';
+
+class ClassDetailPage extends StatefulWidget {
+  final String classId;
+  final String className;
+  final Map<String, dynamic>? boundary;
+  final String username;
+
+  const ClassDetailPage({
+    super.key,
+    required this.classId,
+    required this.className,
+    this.boundary,
+    required this.username,
+  });
+
+  @override
+  State<ClassDetailPage> createState() => _ClassDetailPageState();
+}
+
+class _ClassDetailPageState extends State<ClassDetailPage> {
+  bool _isReporting = false;
+
+  // -------------------------------------------------------------------------
+  // Geofence check
+  // -------------------------------------------------------------------------
+  Future<bool> _checkGeofence() async {
+    if (widget.boundary == null) return true;
+
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return false;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      return false;
+    }
+
+    final pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    final double boundaryLat = (widget.boundary!['lat'] as num).toDouble();
+    final double boundaryLng = (widget.boundary!['lng'] as num).toDouble();
+    final double radiusMeters = (widget.boundary!['radiusMeters'] as num).toDouble();
+
+    final double distance = Geolocator.distanceBetween(
+      pos.latitude,
+      pos.longitude,
+      boundaryLat,
+      boundaryLng,
+    );
+
+    return distance <= radiusMeters;
+  }
+
+  // -------------------------------------------------------------------------
+  // Verify face against the registered model
+  // -------------------------------------------------------------------------
+  static const String _verifyFaceEndpoint = 'https://pasteshub-navikarana-backend.hf.space/login-face';
+
+  Future<String?> _verifyFace(File photo) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse(_verifyFaceEndpoint));
+      request.fields['username'] = widget.username;
+      request.files.add(await http.MultipartFile.fromPath('image', photo.path));
+      final streamed = await request.send();
+      final body = await streamed.stream.bytesToString();
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      if (decoded['verified'] == true) return null;
+      return decoded['error'] as String? ?? 'Face not recognised.';
+    } catch (_) {
+      return 'Could not reach the server. Please check your connection.';
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Upload photo to Firebase Storage
+  // -------------------------------------------------------------------------
+  Future<String?> _uploadPhoto(File photo) async {
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('attendance_photos')
+          .child(widget.classId)
+          .child('${widget.username}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await ref.putFile(photo);
+      return await ref.getDownloadURL();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Get Active Period
+  // -------------------------------------------------------------------------
+  Map<String, dynamic>? _getActivePeriod(List<QueryDocumentSnapshot> periodDocs) {
+    final now = DateTime.now();
+    for (var doc in periodDocs) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['startTime'] == null || data['endTime'] == null) continue;
+      
+      final realStart = (data['startTime'] as Timestamp).toDate();
+      final realEnd = (data['endTime'] as Timestamp).toDate();
+      
+      final start = realStart.subtract(const Duration(minutes: 10));
+      final end = realEnd.add(const Duration(minutes: 10));
+      
+      if (now.isAfter(start) && now.isBefore(end)) {
+        return {'id': doc.id, ...data};
+      }
+    }
+    return null;
+  }
+
+  // -------------------------------------------------------------------------
+  // Main report flow
+  // -------------------------------------------------------------------------
+  Future<void> _reportAttendance(Map<String, dynamic> activePeriod) async {
+    if (_isReporting) return;
+
+    if (widget.boundary != null) {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(children: [
+              Icon(Icons.location_off_outlined, color: Colors.red),
+              SizedBox(width: 10),
+              Text("Location Required"),
+            ]),
+            content: const Text("This class requires you to be within the boundary to report attendance. Please enable location services and try again."),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), foregroundColor: Colors.white),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Open Settings"),
+              ),
+            ],
+          ),
+        );
+        await Geolocator.openLocationSettings();
+        return;
+      }
+    }
+
+    setState(() => _isReporting = true);
+    final statusNotifier = ValueNotifier("Checking your location...");
+
+    try {
+      _showProgressDialog(statusNotifier);
+
+      bool isWithinGeofence = false;
+      try {
+        isWithinGeofence = await _checkGeofence();
+      } catch (_) {
+        isWithinGeofence = false;
+      }
+
+      if (widget.boundary != null && !isWithinGeofence) {
+        if (mounted) Navigator.of(context).pop();
+        _showSnackBar("You are outside the class boundary. Move closer and try again.");
+        setState(() => _isReporting = false);
+        return;
+      }
+
+      statusNotifier.value = "Opening camera...";
+      File? photo;
+      if (!Platform.isWindows) {
+        final XFile? picked = await ImagePicker().pickImage(
+          source: ImageSource.camera,
+          preferredCameraDevice: CameraDevice.front,
+          maxWidth: 640,
+          maxHeight: 640,
+          imageQuality: 85,
+        );
+        if (picked != null) photo = File(picked.path);
+      } else {
+        final XFile? picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+        if (picked != null) photo = File(picked.path);
+      }
+
+      if (photo == null) {
+        if (mounted) Navigator.of(context).pop();
+        _showSnackBar("Photo is required to report attendance.");
+        setState(() => _isReporting = false);
+        return;
+      }
+
+      statusNotifier.value = "Verifying your face...";
+      final faceError = await _verifyFace(photo);
+      if (faceError != null) {
+        if (mounted) Navigator.of(context).pop();
+        _showSnackBar("Face verification failed: $faceError");
+        setState(() => _isReporting = false);
+        return;
+      }
+
+      statusNotifier.value = "Uploading photo...";
+      final photoUrl = await _uploadPhoto(photo);
+
+      statusNotifier.value = "Saving record...";
+      final now = DateTime.now();
+      final realStart = (activePeriod['startTime'] as Timestamp).toDate();
+      final realEnd = (activePeriod['endTime'] as Timestamp).toDate();
+
+      String entryStatus = "Within Window";
+      if (now.isBefore(realStart)) {
+        entryStatus = "Early Window";
+      } else if (now.isAfter(realEnd)) {
+        entryStatus = "Late Window";
+      }
+
+      await FirebaseFirestore.instance.collection('attendance_logs').add({
+        'userId': widget.username,
+        'classId': widget.classId,
+        'periodId': activePeriod['id'],
+        'className': widget.className,
+        'timestamp': FieldValue.serverTimestamp(),
+        'photoUrl': photoUrl ?? '',
+        'isWithinGeofence': isWithinGeofence,
+        'isVerified': false,
+        'adminVerifiedStatus': isWithinGeofence ? 'Present' : 'Pending',
+        'entryStatus': entryStatus,
+        'verifiedBy': '',
+      });
+
+      if (mounted) Navigator.of(context).pop();
+      _showSnackBar(isWithinGeofence ? "Attendance reported! Awaiting admin review." : "Reported outside boundary. Admin will review.");
+    } catch (e) {
+      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
+      _showSnackBar("Something went wrong: $e");
+    } finally {
+      setState(() => _isReporting = false);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
+  void _showProgressDialog(ValueNotifier<String> statusNotifier) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: ValueListenableBuilder<String>(
+            valueListenable: statusNotifier,
+            builder: (_, value, __) => Row(
+              children: [
+                const CircularProgressIndicator(color: Color(0xFF6A8A73)),
+                const SizedBox(width: 20),
+                Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _photoPlaceholder() {
+    return Container(
+      width: 52, height: 52,
+      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
+      child: const Icon(Icons.person, color: Colors.grey),
+    );
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
+  }
+
+
+
+  // -------------------------------------------------------------------------
+  // Build
+  // -------------------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF101010),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.white,
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.pop(context)),
+        title: Text(widget.className, style: const TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.forum_outlined),
+            tooltip: "Community",
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CommunityPage(
+                  classId: widget.classId,
+                  className: widget.className,
+                  username: widget.username,
+                  isAdmin: false,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('attendance_logs').where('userId', isEqualTo: widget.username).where('classId', isEqualTo: widget.classId).snapshots(),
+            builder: (context, snapshot) {
+              String statusLabel = "Not Reported Today";
+              Color statusColor = Colors.grey.shade500;
+              IconData statusIcon = Icons.radio_button_unchecked;
+
+              if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                final todayDocs = snapshot.data!.docs.where((doc) {
+                  final ts = (doc.data() as Map)['timestamp'] as Timestamp?;
+                  if (ts == null) return false;
+                  final d = ts.toDate();
+                  return d.isAfter(startOfDay) && d.isBefore(endOfDay);
+                }).toList();
+                
+                if (todayDocs.isNotEmpty) {
+                  todayDocs.sort((a, b) => ((b.data() as Map)['timestamp'] as Timestamp).compareTo((a.data() as Map)['timestamp'] as Timestamp));
+                  final log = todayDocs.first.data() as Map<String, dynamic>;
+                  final adminStatus = log['adminVerifiedStatus'] as String? ?? 'Pending';
+                  
+                  if (adminStatus == 'Present') {
+                    statusLabel = "Verified Present";
+                    statusColor = const Color(0xFF6A8A73);
+                    statusIcon = Icons.check_circle;
+                  } else if (adminStatus == 'Late') {
+                    statusLabel = "Verified Late";
+                    statusColor = Colors.orange;
+                    statusIcon = Icons.access_time_filled;
+                  } else if (adminStatus == 'Absent') {
+                    statusLabel = "Marked Absent";
+                    statusColor = Colors.red;
+                    statusIcon = Icons.cancel;
+                  } else {
+                    statusLabel = "Pending Verification";
+                    statusColor = Colors.orange;
+                    statusIcon = Icons.hourglass_top_rounded;
+                  }
+                }
+              }
+
+              return Container(
+                margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(statusIcon, color: statusColor, size: 28),
+                    const SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Today's Last Period Status", style: TextStyle(color: Colors.white54, fontSize: 12)),
+                        const SizedBox(height: 2),
+                        Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(top: 16, bottom: 8), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+                  const Padding(padding: EdgeInsets.fromLTRB(24, 8, 24, 12), child: Text("Attendance History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('classes').doc(widget.classId).collection('periods').orderBy('startTime', descending: true).snapshots(),
+                      builder: (context, periodSnap) {
+                        if (!periodSnap.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
+                        final periods = periodSnap.data!.docs;
+                        
+                        if (periods.isEmpty) return const Center(child: Text("No periods scheduled yet.", style: TextStyle(color: Colors.grey)));
+
+                        return StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('attendance_logs').where('userId', isEqualTo: widget.username).where('classId', isEqualTo: widget.classId).snapshots(),
+                          builder: (context, logSnap) {
+                            if (!logSnap.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
+                            
+                            // Map logs by periodId — keep most recent if duplicates exist
+                            Map<String, Map<String, dynamic>> logMap = {};
+                            for (var log in logSnap.data!.docs) {
+                              final data = log.data() as Map<String, dynamic>;
+                              final pId = data['periodId'] as String?;
+                              if (pId == null) continue;
+                              final existing = logMap[pId];
+                              if (existing == null) {
+                                logMap[pId] = data;
+                              } else {
+                                final existingTs = existing['timestamp'] as Timestamp?;
+                                final newTs = data['timestamp'] as Timestamp?;
+                                if (newTs != null && (existingTs == null || newTs.compareTo(existingTs) > 0)) {
+                                  logMap[pId] = data;
+                                }
+                              }
+                            }
+
+                            return ListView.builder(
+                              padding: const EdgeInsets.only(left: 16, top: 0, right: 16, bottom: 100),
+                              itemCount: periods.length,
+                              itemBuilder: (context, index) {
+                                final period = periods[index];
+                                final pData = period.data() as Map<String, dynamic>;
+                                final logData = logMap[period.id];
+
+                                final startTs = pData['startTime'] as Timestamp?;
+                                final endTs = pData['endTime'] as Timestamp?;
+                                final String timeStr = (startTs != null && endTs != null) 
+                                    ? "${DateFormat('hh:mm a').format(startTs.toDate())} - ${DateFormat('hh:mm a').format(endTs.toDate())}"
+                                    : "Unknown Time";
+                                final String dateStr = pData['date'] ?? "";
+                                
+                                String adminStatus = "Not Reported";
+                                String entryStatus = "";
+                                bool isWithinGeofence = false;
+                                String photoUrl = "";
+                                
+                                if (logData != null) {
+                                   adminStatus = logData['adminVerifiedStatus'] as String? ?? 'Pending';
+                                   entryStatus = logData['entryStatus'] as String? ?? '';
+                                   isWithinGeofence = logData['isWithinGeofence'] == true;
+                                   photoUrl = logData['photoUrl'] as String? ?? '';
+                                } else {
+                                   final realStart = startTs?.toDate();
+                                   if (realStart != null && DateTime.now().isBefore(realStart.subtract(const Duration(minutes: 10)))) {
+                                       adminStatus = "Upcoming";
+                                   } else if (endTs != null && DateTime.now().isAfter(endTs.toDate().add(const Duration(minutes: 10)))) {
+                                       adminStatus = "Missing";
+                                   } else {
+                                       adminStatus = "Pending Action";
+                                   }
+                                }
+
+                                Color adminColor = Colors.grey;
+                                IconData adminIcon = Icons.help_outline;
+                                if (adminStatus == 'Present') { adminColor = const Color(0xFF6A8A73); adminIcon = Icons.verified; }
+                                else if (adminStatus == 'Late') { adminColor = Colors.orange; adminIcon = Icons.access_time_filled; }
+                                else if (adminStatus == 'Absent') { adminColor = Colors.red; adminIcon = Icons.cancel; }
+                                else if (adminStatus == 'Upcoming') { adminColor = Colors.blue; adminIcon = Icons.calendar_today; }
+                                else if (adminStatus == 'Missing') { adminColor = Colors.orange; adminIcon = Icons.warning_amber_rounded; }
+                                else if (adminStatus == 'Pending' || adminStatus == 'Pending Action') { adminColor = Colors.orangeAccent; adminIcon = Icons.hourglass_top_rounded; }
+
+                                Widget photoWidget = photoUrl.isNotEmpty
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.network(
+                                          photoUrl,
+                                          width: 52, height: 52, fit: BoxFit.cover,
+                                          errorBuilder: (_, e, s) => _photoPlaceholder(),
+                                        ),
+                                      )
+                                    : _photoPlaceholder();
+
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  elevation: 0,
+                                  color: Colors.grey.shade50,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    child: Row(
+                                      children: [
+                                        photoWidget,
+                                        const SizedBox(width: 12),
+                                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                          Text("$dateStr | $timeStr", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87)),
+                                          if (entryStatus.isNotEmpty) ...[const SizedBox(height: 2), Text(entryStatus, style: const TextStyle(fontSize: 11, color: Colors.blueGrey))],
+                                          const SizedBox(height: 8),
+                                          Row(children: [
+                                            if (logData != null) ...[
+                                               _StatusBadge(label: isWithinGeofence ? "In Zone" : "Out of Zone", color: isWithinGeofence ? Colors.green : Colors.red, icon: isWithinGeofence ? Icons.location_on : Icons.location_off),
+                                               const SizedBox(width: 8),
+                                            ],
+                                            _StatusBadge(label: adminStatus, color: adminColor, icon: adminIcon),
+                                          ]),
+                                        ])),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          }
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('classes').doc(widget.classId).collection('periods').snapshots(),
+        builder: (context, periodSnap) {
+          if (!periodSnap.hasData) return const SizedBox.shrink();
+          final activePeriod = _getActivePeriod(periodSnap.data!.docs);
+          if (activePeriod == null) return SizedBox(width: MediaQuery.of(context).size.width - 40, height: 56, child: ElevatedButton.icon(onPressed: null, icon: const Icon(Icons.block), label: const Text("No Active Session", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey, foregroundColor: Colors.white, disabledBackgroundColor: Colors.grey.shade300, disabledForegroundColor: Colors.grey.shade500, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0)));
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('attendance_logs').where('userId', isEqualTo: widget.username).where('periodId', isEqualTo: activePeriod['id']).snapshots(),
+            builder: (context, logSnap) {
+              final bool alreadyReported = logSnap.hasData && logSnap.data!.docs.isNotEmpty;
+              return SizedBox(width: MediaQuery.of(context).size.width - 40, height: 56, child: ElevatedButton.icon(onPressed: alreadyReported || _isReporting ? null : () => _reportAttendance(activePeriod), icon: Icon(alreadyReported ? Icons.check_circle : Icons.camera_alt), label: Text(alreadyReported ? "Reported for this Period" : "Report Attendance", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), foregroundColor: Colors.white, disabledBackgroundColor: Colors.grey.shade300, disabledForegroundColor: Colors.grey.shade500, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 4)));
+            },
+          );
+        },
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  final IconData icon;
+  const _StatusBadge({required this.label, required this.color, required this.icon});
+  @override
+  Widget build(BuildContext context) {
+    return Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withValues(alpha: 0.3))), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 11, color: color), const SizedBox(width: 4), Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600))]));
+  }
+}

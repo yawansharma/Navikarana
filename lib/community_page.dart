@@ -1,0 +1,719 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+const _kGreen = Color(0xFF6A8A73);
+
+// =============================================================================
+// CommunityPage — entry point, two tabs: Channel + Direct Messages
+// =============================================================================
+class CommunityPage extends StatelessWidget {
+  final String classId;
+  final String className;
+  final String username;
+  final bool isAdmin;
+  final List<String> studentIds;
+
+  const CommunityPage({
+    super.key,
+    required this.classId,
+    required this.className,
+    required this.username,
+    required this.isAdmin,
+    this.studentIds = const [],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF101010),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          foregroundColor: Colors.white,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Community",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              Text(className,
+                  style: const TextStyle(fontSize: 11, color: Colors.white60)),
+            ],
+          ),
+          bottom: const TabBar(
+            indicatorColor: _kGreen,
+            labelColor: _kGreen,
+            unselectedLabelColor: Colors.grey,
+            labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            tabs: [
+              Tab(icon: Icon(Icons.forum_outlined, size: 18), text: "Channel"),
+              Tab(
+                  icon: Icon(Icons.mail_outline, size: 18),
+                  text: "Direct Messages"),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            // ── Tab 0: Public class channel ──────────────────────────────────
+            _ChatView(
+              messagesRef: FirebaseFirestore.instance
+                  .collection('community')
+                  .doc(classId)
+                  .collection('channel_messages'),
+              classId: classId,
+              username: username,
+              isAdmin: isAdmin,
+              showSenderName: true,
+            ),
+            // ── Tab 1: Direct Messages ───────────────────────────────────────
+            isAdmin
+                ? _AdminDmListTab(
+                    classId: classId,
+                    adminName: username,
+                    studentIds: studentIds,
+                  )
+                : _ChatView(
+                    messagesRef: FirebaseFirestore.instance
+                        .collection('community')
+                        .doc(classId)
+                        .collection('dm_$username'),
+                    classId: classId,
+                    username: username,
+                    isAdmin: false,
+                    showSenderName: false,
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Generic chat view — reused for channel and student DM tab
+// =============================================================================
+class _ChatView extends StatefulWidget {
+  final CollectionReference messagesRef;
+  final String classId;
+  final String username;
+  final bool isAdmin;
+  final bool showSenderName;
+
+  const _ChatView({
+    required this.messagesRef,
+    required this.classId,
+    required this.username,
+    required this.isAdmin,
+    required this.showSenderName,
+  });
+
+  @override
+  State<_ChatView> createState() => _ChatViewState();
+}
+
+class _ChatViewState extends State<_ChatView> {
+  final _ctrl = TextEditingController();
+  final _scroll = ScrollController();
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(_scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut);
+      }
+    });
+  }
+
+  Future<void> _send() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    _ctrl.clear();
+    setState(() => _sending = true);
+    await widget.messagesRef.add({
+      'senderId': widget.username,
+      'text': text,
+      'fileUrl': '',
+      'fileType': '',
+      'fileName': '',
+      'timestamp': FieldValue.serverTimestamp(),
+      'isAdmin': widget.isAdmin,
+    });
+    setState(() => _sending = false);
+    _scrollToBottom();
+  }
+
+  Future<void> _attach() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: [
+        'pdf', 'csv', 'doc', 'docx', 'xls', 'xlsx',
+        'png', 'jpg', 'jpeg', 'gif', 'txt',
+      ],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    if (file.path == null) return;
+    setState(() => _sending = true);
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('community_files')
+          .child(widget.classId)
+          .child('${DateTime.now().millisecondsSinceEpoch}_${file.name}');
+      await ref.putFile(File(file.path!));
+      final url = await ref.getDownloadURL();
+      await widget.messagesRef.add({
+        'senderId': widget.username,
+        'text': '',
+        'fileUrl': url,
+        'fileType': file.extension?.toLowerCase() ?? '',
+        'fileName': file.name,
+        'timestamp': FieldValue.serverTimestamp(),
+        'isAdmin': widget.isAdmin,
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Upload failed: $e")));
+      }
+    }
+    setState(() => _sending = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      child: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: widget.messagesRef.orderBy('timestamp').snapshots(),
+              builder: (context, snap) {
+                if (!snap.hasData) {
+                  return const Center(
+                      child: CircularProgressIndicator(color: _kGreen));
+                }
+                final docs = snap.data!.docs;
+                if (docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "No messages yet.\nStart the conversation!",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  );
+                }
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scroll.hasClients) {
+                    _scroll.jumpTo(_scroll.position.maxScrollExtent);
+                  }
+                });
+                return ListView.builder(
+                  controller: _scroll,
+                  padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+                  itemCount: docs.length,
+                  itemBuilder: (_, i) {
+                    final data = docs[i].data() as Map<String, dynamic>;
+                    final isMine = data['senderId'] == widget.username;
+                    return _MessageBubble(
+                      data: data,
+                      isMine: isMine,
+                      showSenderName: widget.showSenderName,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFE0E0E0)),
+          _InputBar(
+            ctrl: _ctrl,
+            onSend: _send,
+            onAttach: _attach,
+            sending: _sending,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Admin DM list — lists enrolled students, tap to open thread
+// =============================================================================
+class _AdminDmListTab extends StatelessWidget {
+  final String classId;
+  final String adminName;
+  final List<String> studentIds;
+
+  const _AdminDmListTab({
+    required this.classId,
+    required this.adminName,
+    required this.studentIds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (studentIds.isEmpty) {
+      return Container(
+        color: Colors.white,
+        child: const Center(
+            child: Text("No students enrolled.",
+                style: TextStyle(color: Colors.grey))),
+      );
+    }
+    return Container(
+      color: Colors.white,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: studentIds.length,
+        separatorBuilder: (_, __) =>
+            const Divider(height: 1, indent: 72, endIndent: 16),
+        itemBuilder: (context, i) {
+          final studentId = studentIds[i];
+          return FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance
+                .collection('users')
+                .doc(studentId)
+                .get(),
+            builder: (context, snap) {
+              String name = studentId;
+              if (snap.hasData && snap.data!.exists) {
+                final d = snap.data!.data() as Map<String, dynamic>?;
+                name = d?['name'] as String? ?? studentId;
+              }
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _kGreen.withValues(alpha: 0.15),
+                  child: Text(
+                    name[0].toUpperCase(),
+                    style: const TextStyle(
+                        color: _kGreen, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                title: Text(name,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(studentId,
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.grey)),
+                trailing:
+                    const Icon(Icons.chevron_right, color: Colors.grey),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => _DmThreadPage(
+                      classId: classId,
+                      studentId: studentId,
+                      studentName: name,
+                      adminName: adminName,
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Full-screen DM thread page — admin navigates here
+// =============================================================================
+class _DmThreadPage extends StatelessWidget {
+  final String classId;
+  final String studentId;
+  final String studentName;
+  final String adminName;
+
+  const _DmThreadPage({
+    required this.classId,
+    required this.studentId,
+    required this.studentName,
+    required this.adminName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF101010),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(studentName,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(studentId,
+                style:
+                    const TextStyle(fontSize: 11, color: Colors.white60)),
+          ],
+        ),
+      ),
+      body: _ChatView(
+        messagesRef: FirebaseFirestore.instance
+            .collection('community')
+            .doc(classId)
+            .collection('dm_$studentId'),
+        classId: classId,
+        username: adminName,
+        isAdmin: true,
+        showSenderName: false,
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Message bubble
+// =============================================================================
+class _MessageBubble extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final bool isMine;
+  final bool showSenderName;
+
+  const _MessageBubble(
+      {required this.data,
+      required this.isMine,
+      required this.showSenderName});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = data['text'] as String? ?? '';
+    final fileUrl = data['fileUrl'] as String? ?? '';
+    final fileType = data['fileType'] as String? ?? '';
+    final fileName = data['fileName'] as String? ?? '';
+    final senderId = data['senderId'] as String? ?? '';
+    final isAdmin = data['isAdmin'] == true;
+    final ts = data['timestamp'] as Timestamp?;
+    final timeStr =
+        ts != null ? DateFormat('hh:mm a').format(ts.toDate()) : '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment:
+            isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          if (showSenderName && !isMine)
+            Padding(
+              padding: const EdgeInsets.only(left: 40, bottom: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(senderId,
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: _kGreen)),
+                  if (isAdmin) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                          color: _kGreen.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4)),
+                      child: const Text("Admin",
+                          style: TextStyle(
+                              fontSize: 9,
+                              color: _kGreen,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          Row(
+            mainAxisAlignment:
+                isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isMine) ...[
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: isAdmin
+                      ? _kGreen.withValues(alpha: 0.2)
+                      : Colors.grey.shade200,
+                  child: Text(
+                    senderId.isNotEmpty ? senderId[0].toUpperCase() : '?',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: isAdmin ? _kGreen : Colors.grey.shade600,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isMine ? _kGreen : Colors.grey.shade100,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(isMine ? 16 : 4),
+                      bottomRight: Radius.circular(isMine ? 4 : 16),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (text.isNotEmpty)
+                        Text(text,
+                            style: TextStyle(
+                                color: isMine
+                                    ? Colors.white
+                                    : Colors.black87,
+                                fontSize: 14)),
+                      if (fileUrl.isNotEmpty)
+                        _FileAttachment(
+                          fileUrl: fileUrl,
+                          fileType: fileType,
+                          fileName: fileName,
+                          isMine: isMine,
+                        ),
+                      const SizedBox(height: 4),
+                      Text(timeStr,
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: isMine
+                                  ? Colors.white70
+                                  : Colors.grey)),
+                    ],
+                  ),
+                ),
+              ),
+              if (isMine) const SizedBox(width: 8),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// File attachment widget
+// =============================================================================
+class _FileAttachment extends StatelessWidget {
+  final String fileUrl;
+  final String fileType;
+  final String fileName;
+  final bool isMine;
+
+  const _FileAttachment({
+    required this.fileUrl,
+    required this.fileType,
+    required this.fileName,
+    required this.isMine,
+  });
+
+  bool get _isImage =>
+      ['png', 'jpg', 'jpeg', 'gif', 'webp'].contains(fileType);
+
+  IconData get _fileIcon {
+    switch (fileType) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'csv':
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  Color get _fileColor {
+    switch (fileType) {
+      case 'pdf':
+        return Colors.red;
+      case 'csv':
+      case 'xls':
+      case 'xlsx':
+        return Colors.green;
+      case 'doc':
+      case 'docx':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Future<void> _openUrl() async {
+    final uri = Uri.parse(fileUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isImage) {
+      return GestureDetector(
+        onTap: _openUrl,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            fileUrl,
+            width: 200,
+            height: 150,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                const Icon(Icons.broken_image, color: Colors.grey),
+          ),
+        ),
+      );
+    }
+    return GestureDetector(
+      onTap: _openUrl,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isMine
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_fileIcon,
+                color: isMine ? Colors.white : _fileColor, size: 28),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fileName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isMine ? Colors.white : Colors.black87),
+                  ),
+                  Text("Tap to open",
+                      style: TextStyle(
+                          fontSize: 10,
+                          color:
+                              isMine ? Colors.white70 : Colors.grey)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Input bar
+// =============================================================================
+class _InputBar extends StatelessWidget {
+  final TextEditingController ctrl;
+  final VoidCallback onSend;
+  final VoidCallback onAttach;
+  final bool sending;
+
+  const _InputBar({
+    required this.ctrl,
+    required this.onSend,
+    required this.onAttach,
+    required this.sending,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.fromLTRB(
+          12, 8, 12, 12 + MediaQuery.of(context).viewInsets.bottom),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.attach_file, color: _kGreen),
+            onPressed: sending ? null : onAttach,
+            tooltip: "Attach file",
+          ),
+          Expanded(
+            child: TextField(
+              controller: ctrl,
+              maxLines: null,
+              keyboardType: TextInputType.multiline,
+              decoration: InputDecoration(
+                hintText: "Type a message...",
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          sending
+              ? const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Padding(
+                    padding: EdgeInsets.all(8),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: _kGreen),
+                  ))
+              : GestureDetector(
+                  onTap: onSend,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                        color: _kGreen, shape: BoxShape.circle),
+                    child: const Icon(Icons.send,
+                        color: Colors.white, size: 18),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+}

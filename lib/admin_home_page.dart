@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,9 +6,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:intl/intl.dart'; 
+import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 import 'main.dart';
+import 'community_page.dart';
 
+// =============================================================================
+// AdminHomePage — 3-tab shell: Classes | Global Logs | More
+// =============================================================================
 class AdminHomePage extends StatefulWidget {
   final String adminName;
   const AdminHomePage({super.key, required this.adminName});
@@ -21,111 +25,809 @@ class AdminHomePage extends StatefulWidget {
 class _AdminHomePageState extends State<AdminHomePage> {
   int _currentIndex = 0;
   DateTimeRange? _dateRange;
+  String? _classFilter; // used in Global Logs tab
 
-  // Helper function to extract shortforms from school names
-  String _getShortSchoolName(String fullName) {
-    if (fullName.contains('(') && fullName.contains(')')) {
-      return fullName.substring(fullName.indexOf('(') + 1, fullName.indexOf(')'));
-    }
-    if (fullName == "School of Law") return "Law";
-    return fullName;
-  }
-
+  // ---------------------------------------------------------------------------
+  // Scaffold
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').snapshots(),
-      builder: (context, userSnapshot) {
-        Set<String> activeUserIds = {};
-        if (userSnapshot.hasData) {
-          for (var doc in userSnapshot.data!.docs) {
-            activeUserIds.add(doc.id);
-          }
-        }
-
-        return Scaffold(
-          backgroundColor: const Color(0xFF101010),
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-              onPressed: () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false),
-            ),
-            actions: [
-              if (_currentIndex == 0)
-                IconButton(
-                  icon: const Icon(Icons.calendar_month_outlined, color: Colors.white),
-                  tooltip: "Filter Logs",
-                  onPressed: () async {
-                    final picked = await showDateRangePicker(
-                      context: context,
-                      firstDate: DateTime(2024),
-                      lastDate: DateTime.now(),
-                      builder: (context, child) {
-                        return Theme(
-                          data: ThemeData.dark().copyWith(
-                            colorScheme: const ColorScheme.dark(primary: Color(0xFF6A8A73), onPrimary: Colors.white, surface: Color(0xFF202020)),
-                          ),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (picked != null) setState(() => _dateRange = picked);
-                  },
+    return Scaffold(
+      backgroundColor: const Color(0xFF101010),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          onPressed: () => Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+            (route) => false,
+          ),
+        ),
+        title: Text(
+          _tabTitle(),
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+        ),
+        actions: _buildAppBarActions(),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
+            child: Row(
+              children: [
+                Text(
+                  "Welcome, ${widget.adminName}",
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 ),
-              if (_dateRange != null && _currentIndex == 0)
-                IconButton(icon: const Icon(Icons.close, color: Colors.redAccent), onPressed: () => setState(() => _dateRange = null))
+                const Spacer(),
+                const CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Color(0xFF202020),
+                  child: Icon(Icons.admin_panel_settings,
+                      color: Colors.white70, size: 18),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF8F9FB),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+              ),
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(35)),
+                child: _buildCurrentTab(),
+              ),
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, -2))
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (i) => setState(() => _currentIndex = i),
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF6A8A73),
+          unselectedItemColor: Colors.grey.shade400,
+          elevation: 0,
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(
+                icon: Icon(Icons.class_outlined), label: "Classes"),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.dashboard_rounded), label: "Global Logs"),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.more_horiz_rounded), label: "More"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _tabTitle() {
+    switch (_currentIndex) {
+      case 0:
+        return "Classes";
+      case 1:
+        return "Global Logs";
+      case 2:
+        return "More";
+      default:
+        return "";
+    }
+  }
+
+  List<Widget> _buildAppBarActions() {
+    if (_currentIndex == 1) {
+      return [
+        if (_dateRange != null)
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.redAccent),
+            onPressed: () => setState(() => _dateRange = null),
+          ),
+        IconButton(
+          icon: const Icon(Icons.calendar_month_outlined, color: Colors.white),
+          onPressed: () async {
+            final picked = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2024),
+              lastDate: DateTime.now(),
+              builder: (context, child) => Theme(
+                data: ThemeData.dark().copyWith(
+                  colorScheme: const ColorScheme.dark(
+                    primary: Color(0xFF6A8A73),
+                    onPrimary: Colors.white,
+                    surface: Color(0xFF202020),
+                  ),
+                ),
+                child: child!,
+              ),
+            );
+            if (picked != null) setState(() => _dateRange = picked);
+          },
+        ),
+      ];
+    }
+    return [];
+  }
+
+  Widget _buildCurrentTab() {
+    switch (_currentIndex) {
+      case 0:
+        return _buildClassesTab();
+      case 1:
+        return _buildGlobalLogsTab();
+      case 2:
+        return _buildMoreTab();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  // ===========================================================================
+  // TAB 0 — CLASSES
+  // ===========================================================================
+  Widget _buildClassesTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('classes').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
+        }
+        final classes = snapshot.data!.docs;
+
+        return Stack(
+          children: [
+            classes.isEmpty
+                ? const Center(
+                    child: Text("No classes yet. Create one!",
+                        style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+                    itemCount: classes.length,
+                    itemBuilder: (context, index) {
+                      final classDoc = classes[index];
+                      final data =
+                          classDoc.data() as Map<String, dynamic>;
+                      final List<dynamic> studentIds =
+                          data['studentIds'] ?? [];
+                      final bool hasBoundary = data['boundary'] != null;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                        elevation: 0,
+                        color: Colors.white,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ClassManagementPage(
+                                classId: classDoc.id,
+                                classData: data,
+                                adminName: widget.adminName,
+                              ),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F4F2),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(Icons.class_,
+                                      color: Color(0xFF6A8A73), size: 24),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        data['className'] ?? "Unknown Class",
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "Code: ${data['classCode'] ?? classDoc.id}",
+                                        style: TextStyle(
+                                            color: Colors.grey.shade500,
+                                            fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    _miniChip(
+                                      "${studentIds.length} students",
+                                      Icons.people_alt_outlined,
+                                      Colors.blue,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    _miniChip(
+                                      hasBoundary
+                                          ? "Boundary Set"
+                                          : "No Boundary",
+                                      Icons.my_location,
+                                      hasBoundary
+                                          ? Colors.green
+                                          : Colors.orange,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.chevron_right,
+                                    color: Colors.grey, size: 18),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
+            // FAB — Create Class
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: FloatingActionButton.extended(
+                backgroundColor: const Color(0xFF6A8A73),
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add),
+                label: const Text("New Class",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () => _openCreateClassDialog(context),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _openCreateClassDialog(BuildContext context) {
+    final nameCtrl = TextEditingController();
+    final codeCtrl = TextEditingController();
+    Map<String, dynamic>? pendingBoundary;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("Create Class",
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: "Class Name (e.g. CS101)"),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: codeCtrl,
+                decoration: const InputDecoration(labelText: "Join Code (e.g. CS101-2024)"),
+              ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () async {
+                  final result = await _openBoundaryPickerForCreate(
+                    ctx,
+                    nameCtrl.text.trim().isEmpty ? "New Class" : nameCtrl.text.trim(),
+                    pendingBoundary,
+                  );
+                  if (result != null) setSt(() => pendingBoundary = result);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: pendingBoundary != null
+                        ? const Color(0xFF6A8A73).withValues(alpha: 0.08)
+                        : Colors.red.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: pendingBoundary != null
+                          ? const Color(0xFF6A8A73)
+                          : Colors.red.shade300,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        pendingBoundary != null
+                            ? Icons.location_on
+                            : Icons.location_off_outlined,
+                        color: pendingBoundary != null
+                            ? const Color(0xFF6A8A73)
+                            : Colors.red,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          pendingBoundary != null
+                              ? "Boundary set — ${(pendingBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
+                              : "Set Boundary (required)",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: pendingBoundary != null
+                                ? const Color(0xFF6A8A73)
+                                : Colors.red,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 12,
+                        color: pendingBoundary != null
+                            ? const Color(0xFF6A8A73)
+                            : Colors.red,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
-          body: Column(
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6A8A73),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
+              ),
+              onPressed: nameCtrl.text.isNotEmpty &&
+                      codeCtrl.text.isNotEmpty &&
+                      pendingBoundary != null
+                  ? () async {
+                      await FirebaseFirestore.instance
+                          .collection('classes')
+                          .doc(codeCtrl.text.trim())
+                          .set({
+                        'className': nameCtrl.text.trim(),
+                        'classCode': codeCtrl.text.trim(),
+                        'adminId': widget.adminName,
+                        'studentIds': [],
+                        'boundary': pendingBoundary,
+                      });
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    }
+                  : null,
+              child: const Text("Create"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _openBoundaryPickerForCreate(
+      BuildContext parentCtx, String className, Map<String, dynamic>? existing) async {
+    LatLng pos;
+    if (existing != null) {
+      pos = LatLng((existing['lat'] as num).toDouble(), (existing['lng'] as num).toDouble());
+    } else {
+      try {
+        final loc = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        pos = LatLng(loc.latitude, loc.longitude);
+      } catch (_) {
+        pos = const LatLng(20.59, 78.96);
+      }
+    }
+    double radius = existing != null ? (existing['radiusMeters'] as num).toDouble() : 100.0;
+    LatLng current = pos;
+    final MapController mapController = MapController();
+
+    return showDialog<Map<String, dynamic>>(
+      context: parentCtx,
+      builder: (dialogCtx) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: SizedBox(
+          height: 560,
+          width: 600,
+          child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 10, 24, 25),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF6A8A73),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_currentIndex == 0 ? "Dashboard" : "Manage Users", style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Text("Welcome, ${widget.adminName}", style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-                      ],
+                    const Icon(Icons.my_location, color: Colors.white, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Set Class Boundary",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15)),
+                          Text(className,
+                              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        ],
+                      ),
                     ),
-                    const CircleAvatar(radius: 22, backgroundColor: Color(0xFF202020), child: Icon(Icons.admin_panel_settings, color: Colors.white70, size: 20))
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(dialogCtx),
+                    ),
                   ],
                 ),
               ),
               Expanded(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF8F9FB), 
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(35))
-                  ),
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(35)),
-                    child: _currentIndex == 0 ? _buildDashboard(activeUserIds) : _buildUsersTab(userSnapshot.hasData ? userSnapshot.data!.docs : []),
-                  ),
-                ),
+                child: StatefulBuilder(builder: (_, setSt) {
+                  return Stack(
+                    children: [
+                      FlutterMap(
+                        mapController: mapController,
+                        options: MapOptions(
+                          initialCenter: pos,
+                          initialZoom: 16,
+                          onTap: (_, p) => setSt(() => current = p),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.virtualvision.admin',
+                          ),
+                          CircleLayer(circles: [
+                            CircleMarker(
+                              point: current,
+                              radius: radius,
+                              useRadiusInMeter: true,
+                              color: const Color(0xFF6A8A73).withValues(alpha: 0.18),
+                              borderColor: const Color(0xFF6A8A73),
+                              borderStrokeWidth: 2,
+                            ),
+                          ]),
+                          MarkerLayer(markers: [
+                            Marker(
+                              point: current,
+                              width: 40,
+                              height: 40,
+                              child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+                            ),
+                          ]),
+                        ],
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                const Icon(Icons.my_location, size: 13, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "${current.latitude.toStringAsFixed(5)}, ${current.longitude.toStringAsFixed(5)}",
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              Row(children: [
+                                const Icon(Icons.radio_button_checked, size: 13, color: Color(0xFF6A8A73)),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "Radius: ${radius.toStringAsFixed(0)} m",
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                Expanded(
+                                  child: Slider(
+                                    value: radius,
+                                    min: 30,
+                                    max: 500,
+                                    divisions: 47,
+                                    activeColor: const Color(0xFF6A8A73),
+                                    onChanged: (v) => setSt(() => radius = v),
+                                  ),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF6A8A73),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => Navigator.pop(dialogCtx, {
+                                    'lat': current.latitude,
+                                    'lng': current.longitude,
+                                    'radiusMeters': radius,
+                                  }),
+                                  child: const Text("Confirm Boundary",
+                                      style: TextStyle(fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
               ),
             ],
           ),
-          bottomNavigationBar: Container(
-            decoration: BoxDecoration(
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -2))]
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TAB 1 — GLOBAL LOGS
+  // ===========================================================================
+  Widget _buildGlobalLogsTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('attendance_logs')
+          .orderBy('timestamp', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
+        }
+
+        var logs = snapshot.data!.docs;
+
+        // Date filter
+        if (_dateRange != null) {
+          logs = logs.where((doc) {
+            if (doc['timestamp'] == null) return false;
+            final dt = (doc['timestamp'] as Timestamp).toDate();
+            return dt.isAfter(
+                    _dateRange!.start.subtract(const Duration(days: 1))) &&
+                dt.isBefore(_dateRange!.end.add(const Duration(days: 1)));
+          }).toList();
+        }
+
+        // Class filter
+        if (_classFilter != null) {
+          logs = logs
+              .where(
+                  (doc) => (doc.data() as Map)['classId'] == _classFilter)
+              .toList();
+        }
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+              child: Row(
+                children: [
+                  const Text("All Logs",
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A1C1E))),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.download_rounded,
+                        color: Color(0xFF6A8A73)),
+                    tooltip: "Export CSV",
+                    onPressed: _exportLogsToCSV,
+                  ),
+                ],
+              ),
             ),
-            child: BottomNavigationBar(
-              currentIndex: _currentIndex,
-              onTap: (i) => setState(() => _currentIndex = i),
-              backgroundColor: Colors.white,
-              selectedItemColor: const Color(0xFF6A8A73),
-              unselectedItemColor: Colors.grey.shade400,
-              elevation: 0,
-              type: BottomNavigationBarType.fixed,
-              items: const [
-                BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: "Dashboard"),
-                BottomNavigationBarItem(icon: Icon(Icons.group_outlined), label: "Users"),
+
+            // Class filter chips
+            _buildClassFilterChips(),
+
+            const SizedBox(height: 8),
+
+            Expanded(
+              child: logs.isEmpty
+                  ? const Center(
+                      child: Text("No records found.",
+                          style: TextStyle(color: Colors.grey)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      itemCount: logs.length,
+                      itemBuilder: (context, index) {
+                        final doc = logs[index];
+                        final data = doc.data() as Map<String, dynamic>;
+                        return _buildGlobalLogCard(data);
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildClassFilterChips() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('classes').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final classes = snapshot.data!.docs;
+        return SizedBox(
+          height: 42,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: const Text("All"),
+                  selected: _classFilter == null,
+                  onSelected: (_) => setState(() => _classFilter = null),
+                  selectedColor:
+                      const Color(0xFF6A8A73).withValues(alpha: 0.2),
+                  checkmarkColor: const Color(0xFF6A8A73),
+                ),
+              ),
+              ...classes.map((c) {
+                final d = c.data() as Map<String, dynamic>;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(d['className'] ?? c.id),
+                    selected: _classFilter == c.id,
+                    onSelected: (_) =>
+                        setState(() => _classFilter = c.id),
+                    selectedColor:
+                        const Color(0xFF6A8A73).withValues(alpha: 0.2),
+                    checkmarkColor: const Color(0xFF6A8A73),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGlobalLogCard(Map<String, dynamic> data) {
+    final DateTime date = data['timestamp'] != null
+        ? (data['timestamp'] as Timestamp).toDate()
+        : DateTime.now();
+    final bool isVerified = data['isVerified'] == true;
+    final bool isWithinGeofence = data['isWithinGeofence'] == true;
+    final String photoUrl = data['photoUrl'] as String? ?? '';
+    final String userId = data['userId'] as String? ?? 'Unknown';
+    final String className = data['className'] as String? ?? '';
+
+    return FutureBuilder<DocumentSnapshot>(
+      future:
+          FirebaseFirestore.instance.collection('users').doc(userId).get(),
+      builder: (context, userSnap) {
+        String studentName = userId;
+        if (userSnap.hasData && userSnap.data!.exists) {
+          studentName =
+              (userSnap.data!.data() as Map<String, dynamic>?)?['name'] ??
+                  userId;
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade100),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3))
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                if (photoUrl.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(photoUrl,
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                        errorBuilder: (e, o, s) => _photoPlaceholder()),
+                  )
+                else
+                  _photoPlaceholder(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(studentName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14)),
+                      if (className.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(className,
+                            style: TextStyle(
+                                color: Colors.grey.shade500, fontSize: 11)),
+                      ],
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        _miniChip(
+                          isWithinGeofence ? "In Zone" : "Out of Zone",
+                          isWithinGeofence
+                              ? Icons.location_on
+                              : Icons.location_off,
+                          isWithinGeofence ? Colors.green : Colors.red,
+                        ),
+                        const SizedBox(width: 6),
+                        _miniChip(
+                          isVerified ? "Verified" : "Pending",
+                          isVerified ? Icons.verified : Icons.hourglass_top,
+                          isVerified
+                              ? const Color(0xFF6A8A73)
+                              : Colors.orange,
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(DateFormat('hh:mm a').format(date),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(DateFormat('MMM dd').format(date),
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade400)),
+                  ],
+                ),
               ],
             ),
           ),
@@ -134,613 +836,1328 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  Widget _buildDashboard(Set<String> activeUserIds) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF6A8A73), Color(0xFF567a61)]), 
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: const Color(0xFF6A8A73).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Filter Status", style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 6),
-                  Text(
-                    _dateRange == null ? "Showing All Logs" : "${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}",
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Row(
-            children: [
-              const Text("Recent Logs", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E))),
-              const Spacer(),
-              IconButton(icon: const Icon(Icons.download_rounded, color: Color(0xFF6A8A73)), onPressed: _exportLogsToCSV),
-              IconButton(icon: const Icon(Icons.cleaning_services_rounded, color: Colors.grey), onPressed: () => _cleanupLogs(activeUserIds))
-            ],
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('attendance_logs').orderBy('timestamp', descending: true).snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
-              
-              var logs = snapshot.data!.docs;
-
-              if (_dateRange != null) {
-                logs = logs.where((doc) {
-                  if (doc['timestamp'] == null) return false;
-                  DateTime dt = (doc['timestamp'] as Timestamp).toDate();
-                  return dt.isAfter(_dateRange!.start.subtract(const Duration(days: 1))) && 
-                         dt.isBefore(_dateRange!.end.add(const Duration(days: 1)));
-                }).toList();
-              }
-
-              if (logs.isEmpty) return const Center(child: Text("No records found for this period.", style: TextStyle(color: Colors.grey)));
-
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                itemCount: logs.length,
-                itemBuilder: (context, index) {
-                  final logDoc = logs[index];
-                  final data = logDoc.data() as Map<String, dynamic>;
-                  bool isDeleted = !activeUserIds.contains(data['userId']);
-                  bool isMismatch = data['status'] == "Location Mismatch";
-                  bool isFaceFail = data['status'] == "Face Not Recognized";
-                  bool isPresent = data['status'] == "Present";
-                  DateTime date = data['timestamp'] != null ? (data['timestamp'] as Timestamp).toDate() : DateTime.now();
-                  String photoBase64 = data['photoBase64'] ?? '';
-                  double? latitude = data['location']?['lat'];
-                  double? longitude = data['location']?['lng'];
-                  
-                  return _buildLogCard(
-                    logDoc: logDoc,
-                    data: data,
-                    date: date,
-                    photoBase64: photoBase64,
-                    latitude: latitude,
-                    longitude: longitude,
-                    isMismatch: isMismatch,
-                    isFaceFail: isFaceFail,
-                    isPresent: isPresent,
-                    isDeleted: isDeleted,
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLogCard({
-    required DocumentSnapshot logDoc,
-    required Map<String, dynamic> data,
-    required DateTime date,
-    required String photoBase64,
-    required double? latitude,
-    required double? longitude,
-    required bool isMismatch,
-    required bool isFaceFail,
-    required bool isPresent,
-    required bool isDeleted,
-  }) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(data['userId']).get(),
-      builder: (context, userSnapshot) {
-        String department = "N/A";
-        if (userSnapshot.hasData && userSnapshot.data != null && userSnapshot.data!.exists) {
-          final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
-          department = _getShortSchoolName(userData?['department'] ?? "N/A");
-        }
-
-        String userId = data['userId'] ?? "Unknown";
-        String deviceId = data['deviceId'] ?? _generateDeviceId(userId, date);
-        
-        bool hasFailed = isMismatch || isFaceFail || isDeleted;
-        Color statusColor = Colors.grey;
-        if (isDeleted) statusColor = Colors.red;
-        else if (isMismatch) statusColor = Colors.orange;
-        else if (isFaceFail) statusColor = Colors.redAccent;
-        else if (isPresent) statusColor = const Color(0xFF6A8A73);
-
-        return StatefulBuilder(
-          builder: (context, setCardState) {
-            bool isExpanded = false;
-            String adminNotes = data['adminNotes'] ?? '';
-            String quickNotes = data['quickNotes'] ?? '';
-            final TextEditingController notesController = TextEditingController(text: adminNotes);
-            final TextEditingController quickNotesController = TextEditingController(text: quickNotes);
-
-            return IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Column(
-                    children: [
-                      Container(
-                        width: 14, height: 14,
-                        decoration: BoxDecoration(
-                          color: statusColor, 
-                          shape: BoxShape.circle, 
-                          border: Border.all(color: statusColor.withOpacity(0.25), width: 4)
-                        ),
-                      ),
-                      Expanded(child: Container(width: 2, color: Colors.grey.shade200)),
-                    ],
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 20),
-                      decoration: BoxDecoration(
-                        // MODIFICATION: Card background turns light red if authentication fails
-                        color: hasFailed ? const Color(0xFFFFF5F5) : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: hasFailed ? Colors.red.withOpacity(0.2) : Colors.grey.shade100, 
-                          width: 1
-                        ),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 4))],
-                      ),
-                      child: StatefulBuilder(
-                        builder: (context, setInnerState) => InkWell(
-                          onTap: () => setInnerState(() => isExpanded = !isExpanded),
-                          borderRadius: BorderRadius.circular(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    if (photoBase64.isNotEmpty)
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(16),
-                                        child: Image.memory(base64Decode(photoBase64), height: 56, width: 56, fit: BoxFit.cover),
-                                      )
-                                    else
-                                      Container(
-                                        height: 56, width: 56,
-                                        decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16)),
-                                        child: const Icon(Icons.person, color: Colors.grey),
-                                      ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(data['name'] ?? "Unknown", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF101010))),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            children: [
-                                              _buildStatusBadge(isMismatch, isFaceFail, isPresent, isDeleted),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text("ID: $userId", style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontFamily: "Courier"), overflow: TextOverflow.ellipsis),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text(DateFormat('hh:mm a').format(date), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2D3142))),
-                                        Text(DateFormat('MMM dd').format(date), style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
-                                        const SizedBox(height: 4),
-                                        Icon(isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: Colors.grey.shade400, size: 20),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              
-                              if (isExpanded)
-                                Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: hasFailed ? Colors.red.withOpacity(0.02) : const Color(0xFFFBFBFC),
-                                    borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(20), bottomRight: Radius.circular(20)),
-                                    border: Border(top: BorderSide(color: hasFailed ? Colors.red.withOpacity(0.1) : Colors.grey.shade100))
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: Colors.white, 
-                                            borderRadius: BorderRadius.circular(12), 
-                                            border: Border.all(color: hasFailed ? Colors.red.withOpacity(0.1) : Colors.grey.shade200)
-                                          ),
-                                          padding: const EdgeInsets.all(12),
-                                          child: Column(
-                                            children: [
-                                              _buildDataRow("School", department),
-                                              const Divider(height: 16, color: Color(0xFFF0F0F0)),
-                                              _buildDataRow("Device ID", deviceId),
-                                              const Divider(height: 16, color: Color(0xFFF0F0F0)),
-                                              _buildDataRow("Auth Status", _getAuthStatusText(isMismatch, isFaceFail, isPresent, isDeleted)),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        
-                                        if (latitude != null && longitude != null)
-                                          Padding(
-                                            padding: const EdgeInsets.only(bottom: 16),
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  padding: const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(
-                                                    color: (isMismatch ? Colors.orange : const Color(0xFF6A8A73)).withOpacity(0.1), 
-                                                    borderRadius: BorderRadius.circular(10)
-                                                  ),
-                                                  child: Icon(Icons.location_on_outlined, color: isMismatch ? Colors.orange : const Color(0xFF6A8A73), size: 20),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text("Location Coordinates", style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
-                                                      Text("$latitude, $longitude", style: const TextStyle(fontSize: 13, color: Color(0xFF101010), fontFamily: "Courier", fontWeight: FontWeight.bold)),
-                                                    ],
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  onPressed: () => _openLocationMap(latitude, longitude),
-                                                  icon: const Icon(Icons.map_rounded, color: Color(0xFF6A8A73)),
-                                                  style: IconButton.styleFrom(backgroundColor: const Color(0xFF6A8A73).withOpacity(0.1)),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          
-                                        _buildNoteSection(
-                                          icon: Icons.flash_on_rounded, 
-                                          title: "Quick Notes", 
-                                          controller: quickNotesController, 
-                                          hint: "Add a quick remark...",
-                                          onChanged: (val) => logDoc.reference.update({'quickNotes': val})
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _buildNoteSection(
-                                          icon: Icons.admin_panel_settings_outlined, 
-                                          title: "Admin Notes", 
-                                          controller: notesController, 
-                                          hint: "Add detailed notes...",
-                                          onChanged: (val) => logDoc.reference.update({'adminNotes': val})
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildNoteSection({required IconData icon, required String title, required TextEditingController controller, required String hint, required Function(String) onChanged}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: Colors.grey.shade600, size: 16),
-            const SizedBox(width: 6),
-            Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          maxLines: title == "Admin Notes" ? 3 : 2,
-          style: const TextStyle(fontSize: 13),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade200)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF6A8A73), width: 1.5)),
-          ),
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDataRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
-        Expanded(child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF101010)), overflow: TextOverflow.ellipsis)),
-      ],
-    );
-  }
-
-  Widget _buildStatusBadge(bool isMismatch, bool isFaceFail, bool isPresent, bool isDeleted) {
-    late Color badgeColor;
-    late Color textColor;
-    late IconData icon;
-    late String label;
-
-    if (isDeleted) {
-      badgeColor = Colors.red.shade50;
-      textColor = Colors.red.shade700;
-      icon = Icons.person_off_outlined;
-      label = "User Deleted";
-    } else if (isFaceFail) {
-      badgeColor = Colors.red.shade50;
-      textColor = Colors.red.shade900;
-      icon = Icons.face_retouching_off_rounded;
-      label = "Face Mismatch";
-    } else if (isMismatch) {
-      badgeColor = Colors.orange.shade50;
-      textColor = Colors.orange.shade800;
-      icon = Icons.location_off_rounded;
-      label = "Location Error";
-    } else if (isPresent) {
-      badgeColor = Colors.green.shade50;
-      textColor = Colors.green.shade700;
-      icon = Icons.verified_user_outlined;
-      label = "Verified";
-    } else {
-      badgeColor = Colors.grey.shade100;
-      textColor = Colors.grey.shade700;
-      icon = Icons.help_outline;
-      label = "Unknown";
-    }
-
+  Widget _photoPlaceholder() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(6)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: textColor, size: 12),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textColor)),
-        ],
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12)),
+      child: const Icon(Icons.person, color: Colors.grey, size: 28),
+    );
+  }
+
+  Future<void> _exportLogsToCSV() async {
+    if (!Platform.isWindows &&
+        !(await Permission.storage.request().isGranted)) {
+      await Permission.manageExternalStorage.request();
+    }
+    final logsSnapshot = await FirebaseFirestore.instance
+        .collection('attendance_logs')
+        .orderBy('timestamp', descending: true)
+        .get();
+    List<List<dynamic>> rows = [
+      ["Student ID", "Class", "Date", "Time", "In Zone", "Verified"]
+    ];
+    for (var doc in logsSnapshot.docs) {
+      final d = doc.data();
+      final DateTime dt = d['timestamp'] != null
+          ? (d['timestamp'] as Timestamp).toDate()
+          : DateTime.now();
+      rows.add([
+        d['userId'] ?? 'Unknown',
+        d['className'] ?? '',
+        DateFormat('dd/MM/yyyy').format(dt),
+        DateFormat('HH:mm').format(dt),
+        d['isWithinGeofence'] == true ? 'Yes' : 'No',
+        d['isVerified'] == true ? 'Yes' : 'No',
+      ]);
+    }
+    final String csvData = const ListToCsvConverter().convert(rows);
+    final Directory? dir = Platform.isWindows
+        ? Directory('${Platform.environment['USERPROFILE']}\\Downloads')
+        : await getExternalStorageDirectory();
+    if (dir == null) return;
+    final path =
+        "${dir.path}/attendance_${DateTime.now().millisecondsSinceEpoch}.csv";
+    await File(path).writeAsString(csvData);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Saved to $path")));
+    }
+  }
+
+  // ===========================================================================
+  // TAB 2 — MORE
+  // ===========================================================================
+  Widget _buildMoreTab() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 16),
+        Center(
+          child: CircleAvatar(
+            radius: 42,
+            backgroundColor: const Color(0xFFF1F4F2),
+            child: Text(
+              widget.adminName.isNotEmpty
+                  ? widget.adminName[0].toUpperCase()
+                  : "A",
+              style: const TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF6A8A73)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: Text(widget.adminName,
+              style: const TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.bold)),
+        ),
+        Center(
+          child: Text("Administrator",
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+        ),
+        const SizedBox(height: 32),
+        _moreItem(Icons.logout_rounded, "Logout", Colors.red, () {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+            (route) => false,
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _moreItem(
+      IconData icon, String label, Color color, VoidCallback onTap) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 0,
+      color: Colors.white,
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        title: Text(label,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+        onTap: onTap,
       ),
     );
   }
 
-  void _openLocationMap(double latitude, double longitude) {
-    LatLng location = LatLng(latitude, longitude);
-    MapController mapController = MapController();
+  // Shared chip widget used in both tabs
+  Widget _miniChip(String label, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  color: color,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// ClassManagementPage — full-screen class management pushed from Classes tab
+// =============================================================================
+class ClassManagementPage extends StatefulWidget {
+  final String classId;
+  final Map<String, dynamic> classData;
+  final String adminName;
+
+  const ClassManagementPage({
+    super.key,
+    required this.classId,
+    required this.classData,
+    required this.adminName,
+  });
+
+  @override
+  State<ClassManagementPage> createState() => _ClassManagementPageState();
+}
+
+class _ClassManagementPageState extends State<ClassManagementPage> {
+  late Map<String, dynamic> _classData;
+
+  @override
+  void initState() {
+    super.initState();
+    _classData = Map<String, dynamic>.from(widget.classData);
+  }
+
+  String get _className => _classData['className'] as String? ?? 'Class';
+  String get _classCode => _classData['classCode'] as String? ?? widget.classId;
+
+  // ---------------------------------------------------------------------------
+  // Boundary picker — flutter_map with radius slider
+  // ---------------------------------------------------------------------------
+  void _openBoundaryPicker() async {
+    final boundary = _classData['boundary'];
+    LatLng pos;
+    if (boundary != null) {
+      pos = LatLng((boundary['lat'] as num).toDouble(),
+          (boundary['lng'] as num).toDouble());
+    } else {
+      try {
+        final loc = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        pos = LatLng(loc.latitude, loc.longitude);
+      } catch (_) {
+        pos = const LatLng(20.59, 78.96);
+      }
+    }
+    if (!mounted) return;
+    double radius =
+        boundary != null ? (boundary['radiusMeters'] as num).toDouble() : 100.0;
+    LatLng current = pos;
+    final MapController mapController = MapController();
 
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: SizedBox(
-          height: 450, width: 600,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: FlutterMap(
-              mapController: mapController,
-              options: MapOptions(initialCenter: location, initialZoom: 17),
-              children: [
-                TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.virtualvision.admin'),
-                MarkerLayer(markers: [Marker(point: location, width: 40, height: 40, child: const Icon(Icons.location_on, color: Color(0xFF6A8A73), size: 40))]),
-              ],
-            ),
+          height: 560,
+          width: 600,
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF6A8A73),
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.my_location,
+                        color: Colors.white, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Set Class Boundary",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15)),
+                          Text(_className,
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Map + controls
+              Expanded(
+                child: StatefulBuilder(builder: (ctx, setSt) {
+                  return Stack(
+                    children: [
+                      FlutterMap(
+                        mapController: mapController,
+                        options: MapOptions(
+                          initialCenter: pos,
+                          initialZoom: 16,
+                          onTap: (_, p) => setSt(() => current = p),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.virtualvision.admin',
+                          ),
+                          CircleLayer(circles: [
+                            CircleMarker(
+                              point: current,
+                              radius: radius,
+                              useRadiusInMeter: true,
+                              color: const Color(0xFF6A8A73)
+                                  .withValues(alpha: 0.18),
+                              borderColor: const Color(0xFF6A8A73),
+                              borderStrokeWidth: 2,
+                            ),
+                          ]),
+                          MarkerLayer(markers: [
+                            Marker(
+                              point: current,
+                              width: 40,
+                              height: 40,
+                              child: const Icon(Icons.location_on,
+                                  color: Colors.red, size: 40),
+                            ),
+                          ]),
+                        ],
+                      ),
+
+                      // Bottom panel
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(20)),
+                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                const Icon(Icons.my_location,
+                                    size: 13, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "${current.latitude.toStringAsFixed(5)}, "
+                                  "${current.longitude.toStringAsFixed(5)}",
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              Row(children: [
+                                const Icon(Icons.radio_button_checked,
+                                    size: 13, color: Color(0xFF6A8A73)),
+                                const SizedBox(width: 6),
+                                Text(
+                                  "Radius: ${radius.toStringAsFixed(0)} m",
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                Expanded(
+                                  child: Slider(
+                                    value: radius,
+                                    min: 30,
+                                    max: 500,
+                                    divisions: 47,
+                                    activeColor: const Color(0xFF6A8A73),
+                                    onChanged: (v) => setSt(() => radius = v),
+                                  ),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF6A8A73),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () async {
+                                    final newBoundary = {
+                                      'lat': current.latitude,
+                                      'lng': current.longitude,
+                                      'radiusMeters': radius,
+                                    };
+                                    await FirebaseFirestore.instance
+                                        .collection('classes')
+                                        .doc(widget.classId)
+                                        .update({'boundary': newBoundary});
+                                    setState(
+                                        () => _classData['boundary'] = newBoundary);
+                                    if (mounted) Navigator.pop(context);
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(const SnackBar(
+                                              content:
+                                                  Text("Boundary saved.")));
+                                    }
+                                  },
+                                  child: const Text("Save Boundary",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  String _generateDeviceId(String userId, DateTime date) {
-    String userPart = userId.length >= 5 ? userId.substring(0, 5).toUpperCase() : userId.toUpperCase();
-    while (userPart.length < 5) userPart = userPart + '_';
-    String dateStr = "${date.year % 100}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}";
-    String deviceId = "$userPart-$dateStr";
-    return deviceId.length > 12 ? deviceId.substring(0, 12) : deviceId;
-  }
-
-  String _getAuthStatusText(bool isMismatch, bool isFaceFail, bool isPresent, bool isDeleted) {
-    if (isDeleted) return "Verification Failed: Account Removed";
-    if (isFaceFail) return "Verification Failed: Face Not Recognized";
-    if (isMismatch) return "Verification Failed: Location Boundary Violation";
-    if (isPresent) return "Access Granted: Identity Verified";
-    return "Unknown Status";
-  }
-
-  Future<void> _exportLogsToCSV() async {
-    if (!Platform.isWindows && !(await Permission.storage.request().isGranted)) await Permission.manageExternalStorage.request();
-    final logsSnapshot = await FirebaseFirestore.instance.collection('attendance_logs').orderBy('timestamp', descending: true).get();
-    List<List<dynamic>> rows = [["Name", "ID", "Date", "Time", "Status", "Lat", "Lng"]];
-    var docs = logsSnapshot.docs;
-
-    if (_dateRange != null) {
-      docs = docs.where((doc) {
-        if (doc['timestamp'] == null) return false;
-        DateTime dt = (doc['timestamp'] as Timestamp).toDate();
-        return dt.isAfter(_dateRange!.start.subtract(const Duration(days: 1))) && dt.isBefore(_dateRange!.end.add(const Duration(days: 1)));
-      }).toList();
-    }
-
-    for (var doc in docs) {
-      Map<String, dynamic> d = doc.data();
-      DateTime dt = d['timestamp'] != null ? (d['timestamp'] as Timestamp).toDate() : DateTime.now();
-      String department = "N/A";
-      try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(d['userId']).get();
-        if (userDoc.exists) department = userDoc.data()?['department'] ?? "N/A";
-      } catch (e) {
-        department = "N/A";
-      }
-
-      String userIdForDevice = d['userId'] as String? ?? 'UNKN';
-      String userPart = userIdForDevice.length >= 5 ? userIdForDevice.substring(0, 5).toUpperCase() : userIdForDevice.toUpperCase();
-      while (userPart.length < 5) userPart = userPart + '_';
-      String deviceId = d['deviceId'] ?? "$userPart-${dt.year % 100}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}";
-      if (deviceId.length > 12) deviceId = deviceId.substring(0, 12);
-      
-      rows.add(["${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}", d['userId'] ?? 'Unknown', d['name'] ?? 'Unknown', department, deviceId, d['status'] ?? 'Unknown', d['location']?['lat'] ?? '', d['location']?['lng'] ?? '', d['quickNotes'] ?? '', d['adminNotes'] ?? '']);
-    }
-
-    String csvData = const ListToCsvConverter().convert(rows);
-    Directory? dir = Platform.isWindows ? Directory('${Platform.environment['USERPROFILE']}\\Downloads') : await getExternalStorageDirectory();
-    if (dir == null) return;
-    final path = "${dir.path}/report_${DateTime.now().millisecondsSinceEpoch}.csv";
-    await File(path).writeAsString(csvData);
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Saved to $path")));
-  }
-
-  Future<void> _cleanupLogs(Set<String> activeIds) async {
-    final logs = await FirebaseFirestore.instance.collection('attendance_logs').get();
-    for (var doc in logs.docs) {
-      if (!activeIds.contains(doc['userId'])) await doc.reference.delete();
-    }
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Logs cleaned")));
-  }
-
-  Widget _buildUsersTab(List<QueryDocumentSnapshot> users) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: users.length,
-      itemBuilder: (context, index) {
-        final data = users[index].data() as Map<String, dynamic>;
-        return Card(
-          margin: const EdgeInsets.only(bottom: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: ExpansionTile(
-            leading: const CircleAvatar(backgroundColor: Color(0xFFF1F4F2), child: Icon(Icons.person, color: Color(0xFF6A8A73))),
-            title: Text(data['name'] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text("ID: ${data['username']}"),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(children: [
-                  ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), foregroundColor: Colors.white, minimumSize: const Size.fromHeight(45), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: () => _openBoundaryPicker(context, data, users[index].id, data['name'] ?? "Unknown"), child: const Text("Set Boundary")),
-                  const SizedBox(height: 8),
-                  TextButton(onPressed: () => FirebaseFirestore.instance.collection('users').doc(users[index].id).delete(), child: const Text("Delete User", style: TextStyle(color: Colors.red)))
-                ]),
-              )
-            ],
+  // ---------------------------------------------------------------------------
+  // Delete class — removes periods, attendance logs, and the class document
+  // ---------------------------------------------------------------------------
+  Future<void> _deleteClass() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Delete Class?", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(
+          "Deleting \"$_className\" will permanently remove the class, all its periods, and all linked attendance records. This cannot be undone.",
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text("Delete Class"),
           ),
-        );
-      },
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Delete all periods
+    final periodsSnap = await FirebaseFirestore.instance
+        .collection('classes')
+        .doc(widget.classId)
+        .collection('periods')
+        .get();
+    for (final doc in periodsSnap.docs) {
+      await doc.reference.delete();
+    }
+
+    // Delete all attendance logs for this class
+    final logsSnap = await FirebaseFirestore.instance
+        .collection('attendance_logs')
+        .where('classId', isEqualTo: widget.classId)
+        .get();
+    for (final doc in logsSnap.docs) {
+      await doc.reference.delete();
+    }
+
+    // Delete the class document itself
+    await FirebaseFirestore.instance.collection('classes').doc(widget.classId).delete();
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("\"$_className\" deleted.")),
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Export CSV — class-scoped
+  // ---------------------------------------------------------------------------
+  Future<void> _exportClassCSV() async {
+    if (!Platform.isWindows &&
+        !(await Permission.storage.request().isGranted)) {
+      await Permission.manageExternalStorage.request();
+    }
+    final logsSnapshot = await FirebaseFirestore.instance
+        .collection('attendance_logs')
+        .where('classId', isEqualTo: widget.classId)
+        .get();
+    List<List<dynamic>> rows = [
+      ["Student ID", "Class", "Date", "Time", "In Zone", "Verified"]
+    ];
+    for (var doc in logsSnapshot.docs) {
+      final d = doc.data();
+      final DateTime dt = d['timestamp'] != null
+          ? (d['timestamp'] as Timestamp).toDate()
+          : DateTime.now();
+      rows.add([
+        d['userId'] ?? 'Unknown',
+        d['className'] ?? _className,
+        DateFormat('dd/MM/yyyy').format(dt),
+        DateFormat('HH:mm').format(dt),
+        d['isWithinGeofence'] == true ? 'Yes' : 'No',
+        d['isVerified'] == true ? 'Yes' : 'No',
+      ]);
+    }
+    final String csvData = const ListToCsvConverter().convert(rows);
+    final Directory? dir = Platform.isWindows
+        ? Directory('${Platform.environment['USERPROFILE']}\\Downloads')
+        : await getExternalStorageDirectory();
+    if (dir == null) return;
+    final path =
+        "${dir.path}/${_className}_${DateTime.now().millisecondsSinceEpoch}.csv";
+    await File(path).writeAsString(csvData);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Saved to $path")));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    final List<dynamic> studentIds = _classData['studentIds'] ?? [];
+    final bool hasBoundary = _classData['boundary'] != null;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF101010),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_className,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 17)),
+            Text("Code: $_classCode",
+                style:
+                    const TextStyle(fontSize: 11, color: Colors.white60)),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.forum_outlined, color: Colors.white),
+            tooltip: "Community",
+            onPressed: () {
+              final studentIds =
+                  (_classData['studentIds'] as List<dynamic>? ?? [])
+                      .cast<String>();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CommunityPage(
+                    classId: widget.classId,
+                    className: _className,
+                    username: widget.adminName,
+                    isAdmin: true,
+                    studentIds: studentIds,
+                  ),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.download_rounded, color: Colors.white),
+            tooltip: "Export CSV",
+            onPressed: _exportClassCSV,
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            tooltip: "Delete Class",
+            onPressed: _deleteClass,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 8),
+          Expanded(
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF8F9FB),
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(35)),
+              ),
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(35)),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+                  children: [
+                    // --- BOUNDARY CARD ---
+                    _sectionCard(
+                      icon: Icons.my_location,
+                      title: "Class Boundary",
+                      trailing: hasBoundary
+                          ? _statusChip("Set", Colors.green)
+                          : _statusChip("Not Set", Colors.orange),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (hasBoundary) ...[
+                            Text(
+                              "Lat: ${(_classData['boundary']['lat'] as num).toStringAsFixed(5)},  "
+                              "Lng: ${(_classData['boundary']['lng'] as num).toStringAsFixed(5)}",
+                              style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 12,
+                                  fontFamily: 'Courier'),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Radius: ${(_classData['boundary']['radiusMeters'] as num).toStringAsFixed(0)} m",
+                              style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 12),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              icon: Icon(hasBoundary
+                                  ? Icons.edit_location_alt
+                                  : Icons.add_location_alt),
+                              label: Text(hasBoundary
+                                  ? "Edit Boundary"
+                                  : "Set Boundary"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6A8A73),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(10)),
+                              ),
+                              onPressed: _openBoundaryPicker,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // --- STUDENTS CARD ---
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 12, offset: const Offset(0, 3))
+                        ],
+                      ),
+                      child: Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          iconColor: const Color(0xFF6A8A73),
+                          collapsedIconColor: Colors.grey,
+                          tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                          title: Row(
+                            children: [
+                              const Icon(Icons.people_alt_outlined, color: Color(0xFF6A8A73), size: 20),
+                              const SizedBox(width: 8),
+                              const Text("Enrolled Students", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                              const Spacer(),
+                              _statusChip("${studentIds.length}", Colors.blue),
+                            ],
+                          ),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                              child: studentIds.isEmpty
+                                  ? const Text("No students enrolled yet.", style: TextStyle(color: Colors.grey, fontSize: 13))
+                                  : StreamBuilder<QuerySnapshot>(
+                                      stream: FirebaseFirestore.instance
+                                          .collection('users')
+                                          .where(FieldPath.documentId, whereIn: studentIds.cast<String>())
+                                          .snapshots(),
+                                      builder: (context, snap) {
+                                        if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
+                                        return Container(
+                                          constraints: const BoxConstraints(maxHeight: 300),
+                                          child: ListView(
+                                            shrinkWrap: true,
+                                            children: snap.data!.docs.map((s) {
+                                              final sd = s.data() as Map<String, dynamic>;
+                                              return ListTile(
+                                                contentPadding: EdgeInsets.zero,
+                                                dense: true,
+                                                leading: const CircleAvatar(
+                                                  radius: 18,
+                                                  backgroundColor: Color(0xFFF1F4F2),
+                                                  child: Icon(Icons.person, color: Color(0xFF6A8A73), size: 16),
+                                                ),
+                                                title: Text(sd['name'] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                                subtitle: Text("ID: ${sd['username'] ?? s.id}", style: const TextStyle(fontSize: 11)),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // --- PERIODS MANAGEMENT CARD ---
+                    _PeriodsManagementSection(
+                      classId: widget.classId,
+                      adminName: widget.adminName,
+                      studentIds: studentIds.cast<String>(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  void _openBoundaryPicker(BuildContext context, Map<String, dynamic> userData, String userId, String fullName) {
-    LatLng pos = userData['boundary'] != null ? LatLng(userData['boundary']['lat'], userData['boundary']['lng']) : LatLng(userData['latitude'] ?? 20.59, userData['longitude'] ?? 78.96);
-    LatLng current = pos;
-    MapController mapController = MapController();
-    showDialog(context: context, builder: (_) => AlertDialog(
-      contentPadding: EdgeInsets.zero, 
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), 
-      content: SizedBox(height: 500, width: 600, child: Column(children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: const BoxDecoration(
-            color: Color(0xFF6A8A73),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20))
+  Widget _sectionCard({
+    required IconData icon,
+    required String title,
+    required Widget child,
+    Widget? trailing,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 12,
+              offset: const Offset(0, 3))
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: const Color(0xFF6A8A73), size: 20),
+              const SizedBox(width: 8),
+              Text(title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15)),
+              if (trailing != null) ...[const Spacer(), trailing],
+            ],
           ),
-          child: Row(children: [
-            const Icon(Icons.person, color: Colors.white, size: 24),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text("Set Boundary", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-              Text(fullName, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-            ])),
-            IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
-          ]),
-        ),
-        Expanded(
-          child: StatefulBuilder(builder: (ctx, setSt) => Stack(children: [
-            FlutterMap(
-              mapController: mapController,
-              options: MapOptions(initialCenter: pos, initialZoom: 15, onTap: (_, p) => setSt(() => current = p)),
-              children: [
-                TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.virtualvision.admin'),
-                MarkerLayer(markers: [Marker(point: current, width: 40, height: 40, child: const Icon(Icons.location_on, color: Colors.red, size: 40))])
-              ],
-            ),
-            Positioned(bottom: 0, left: 0, right: 0, child: Container(
-              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))), 
-              padding: const EdgeInsets.all(12), 
-              child: Row(children: [
-                Expanded(child: InkWell(
-                  onTap: () async {
-                    final latC = TextEditingController(text: current.latitude.toString());
-                    final lngC = TextEditingController(text: current.longitude.toString());
-                    await showDialog(context: context, builder: (c) => AlertDialog(
-                      title: const Text("Coordinates"),
-                      content: Column(mainAxisSize: MainAxisSize.min, children: [
-                        TextField(controller: latC, decoration: const InputDecoration(labelText: "Latitude")),
-                        TextField(controller: lngC, decoration: const InputDecoration(labelText: "Longitude"))
-                      ]),
-                      actions: [
-                        ElevatedButton(onPressed: (){
-                          final la = double.tryParse(latC.text);
-                          final ln = double.tryParse(lngC.text);
-                          if(la!=null&&ln!=null) {
-                            setSt(() {
-                              current = LatLng(la, ln);
-                              mapController.move(current, 15);
-                            });
-                          }
-                          Navigator.pop(c);
-                        }, child: const Text("Update"))
-                      ],
-                    ));
-                  },
-                  child: Text("${current.latitude.toStringAsFixed(5)}, ${current.longitude.toStringAsFixed(5)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))
-                )),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                  onPressed: () {
-                    FirebaseFirestore.instance.collection('users').doc(userId).update({'boundary': {'lat': current.latitude, 'lng': current.longitude}});
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Save", style: TextStyle(color: Colors.white))
-                )
-              ])
-            ))
-          ]))
-        ),
-      ]))
-    ));
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+    );
   }
 }
+
+
+// =============================================================================
+// _PeriodsManagementSection — class-specific periods list
+// =============================================================================
+class _PeriodsManagementSection extends StatefulWidget {
+  final String classId;
+  final String adminName;
+  final List<String> studentIds;
+
+  const _PeriodsManagementSection({
+    required this.classId,
+    required this.adminName,
+    required this.studentIds,
+  });
+
+  @override
+  State<_PeriodsManagementSection> createState() => _PeriodsManagementSectionState();
+}
+
+class _PeriodsManagementSectionState extends State<_PeriodsManagementSection> {
+  Future<void> _deletePeriod(String pId) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Delete Period?", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text("This will permanently remove this session and all linked attendance records."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text("Delete Period"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      // Delete linked attendance logs first
+      final logsSnap = await FirebaseFirestore.instance
+          .collection('attendance_logs')
+          .where('periodId', isEqualTo: pId)
+          .get();
+      for (final doc in logsSnap.docs) {
+        await doc.reference.delete();
+      }
+      await FirebaseFirestore.instance
+          .collection('classes')
+          .doc(widget.classId)
+          .collection('periods')
+          .doc(pId)
+          .delete();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Period and linked attendance records deleted.")));
+    }
+  }
+
+  Future<void> _openAddPeriodDialog(BuildContext context) async {
+    DateTime? selectedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2100),
+      builder: (context, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(primary: Color(0xFF6A8A73), onPrimary: Colors.white, surface: Color(0xFF202020)),
+        ),
+        child: child!,
+      ),
+    );
+    if (selectedDate == null) return;
+
+    TimeOfDay? startTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: TimeOfDay.now().hour, minute: 0),
+      helpText: "Select Start Time",
+      builder: (context, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(primary: Color(0xFF6A8A73), onPrimary: Colors.white, surface: Color(0xFF202020)),
+        ),
+        child: child!,
+      ),
+    );
+    if (startTime == null) return;
+
+    TimeOfDay? endTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: (startTime.hour + 1) % 24, minute: startTime.minute),
+      helpText: "Select End Time",
+      builder: (context, child) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(primary: Color(0xFF6A8A73), onPrimary: Colors.white, surface: Color(0xFF202020)),
+        ),
+        child: child!,
+      ),
+    );
+    if (endTime == null) return;
+
+    DateTime startDT = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, startTime.hour, startTime.minute);
+    DateTime endDT = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, endTime.hour, endTime.minute);
+
+    if (endDT.isBefore(startDT) || endDT.isAtSameMomentAs(startDT)) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("End time must be after start time.")));
+      return;
+    }
+
+    final periodsSnap = await FirebaseFirestore.instance.collection('classes').doc(widget.classId).collection('periods').get();
+    bool overlap = false;
+    for (var doc in periodsSnap.docs) {
+      final data = doc.data();
+      if (data['startTime'] == null || data['endTime'] == null) continue;
+      DateTime existingStart = (data['startTime'] as Timestamp).toDate();
+      DateTime existingEnd = (data['endTime'] as Timestamp).toDate();
+
+      if (startDT.isBefore(existingEnd) && endDT.isAfter(existingStart)) {
+        overlap = true;
+        break;
+      }
+    }
+
+    if (overlap) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Period overlaps with an existing one.")));
+      return;
+    }
+
+    String dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+    await FirebaseFirestore.instance.collection('classes').doc(widget.classId).collection('periods').add({
+      'startTime': Timestamp.fromDate(startDT),
+      'endTime': Timestamp.fromDate(endDT),
+      'date': dateStr,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Period created successfully.")));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 12, offset: const Offset(0, 3))],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.access_time_filled, color: Color(0xFF6A8A73), size: 20),
+              const SizedBox(width: 8),
+              const Text("Class Periods", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const Spacer(),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text("Add"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6A8A73),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () => _openAddPeriodDialog(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('classes').doc(widget.classId).collection('periods').orderBy('startTime', descending: true).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
+              if (snapshot.data!.docs.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: Text("No periods added yet.", style: TextStyle(color: Colors.grey))),
+                );
+              }
+
+              Map<String, List<DocumentSnapshot>> grouped = {};
+              for (var doc in snapshot.data!.docs) {
+                final dateStr = (doc.data() as Map<String, dynamic>)['date'] as String? ?? 'Unknown Date';
+                grouped.putIfAbsent(dateStr, () => []).add(doc);
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: grouped.entries.map((entry) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 8),
+                        child: Text(entry.key, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade500, fontSize: 13)),
+                      ),
+                      ...entry.value.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final startTS = data['startTime'] as Timestamp?;
+                        final endTS = data['endTime'] as Timestamp?;
+                        final String timeStr = (startTS != null && endTS != null) 
+                            ? "${DateFormat('hh:mm a').format(startTS.toDate())} - ${DateFormat('hh:mm a').format(endTS.toDate())}"
+                            : "Unknown Time";
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+                          elevation: 0,
+                          color: Colors.grey.shade50,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            leading: const Icon(Icons.class_, color: Color(0xFF6A8A73), size: 24),
+                            title: Text(timeStr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                  onPressed: () => _deletePeriod(doc.id),
+                                ),
+                                const Icon(Icons.chevron_right, color: Colors.grey),
+                              ],
+                            ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PeriodAttendancePage(
+                                    classId: widget.classId,
+                                    periodId: doc.id,
+                                    periodData: data,
+                                    studentIds: widget.studentIds,
+                                    adminName: widget.adminName,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      }),
+                    ],
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// PeriodAttendancePage — specific period attendance verification
+// =============================================================================
+class PeriodAttendancePage extends StatefulWidget {
+  final String classId;
+  final String periodId;
+  final Map<String, dynamic> periodData;
+  final List<String> studentIds;
+  final String adminName;
+
+  const PeriodAttendancePage({
+    super.key,
+    required this.classId,
+    required this.periodId,
+    required this.periodData,
+    required this.studentIds,
+    required this.adminName,
+  });
+
+  @override
+  State<PeriodAttendancePage> createState() => _PeriodAttendancePageState();
+}
+
+class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
+  void _showPhotoDialog(BuildContext context, String photoUrl) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        contentPadding: const EdgeInsets.all(8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image.network(photoUrl, fit: BoxFit.cover),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setStatus(String studentId, String? logDocId, String status) async {
+    if (logDocId != null) {
+      await FirebaseFirestore.instance.collection('attendance_logs').doc(logDocId).update({
+        'adminVerifiedStatus': status,
+        'isVerified': status == "Present" || status == "Late",
+      });
+    } else {
+      await FirebaseFirestore.instance.collection('attendance_logs').add({
+        'userId': studentId,
+        'classId': widget.classId,
+        'periodId': widget.periodId,
+        'timestamp': FieldValue.serverTimestamp(),
+        'photoUrl': '',
+        'isWithinGeofence': false,
+        'isVerified': status == "Present" || status == "Late",
+        'adminVerifiedStatus': status,
+        'entryStatus': "Manual Entry",
+        'verifiedBy': widget.adminName,
+        'className': '',
+      });
+    }
+  }
+
+  Widget _statusButtons(String selectedStatus, String studentId, String? logDocId) {
+    return Wrap(
+      spacing: 6,
+      children: [
+        _StatusBtn(label: 'Present', color: Colors.green,   selected: selectedStatus == 'Present', onTap: () => _setStatus(studentId, logDocId, 'Present')),
+        _StatusBtn(label: 'Late',    color: Colors.orange,  selected: selectedStatus == 'Late',    onTap: () => _setStatus(studentId, logDocId, 'Late')),
+        _StatusBtn(label: 'Absent',  color: Colors.red,     selected: selectedStatus == 'Absent',  onTap: () => _setStatus(studentId, logDocId, 'Absent')),
+      ],
+    );
+  }
+
+  Widget _photoAvatar(String photoUrl, BuildContext context) {
+    if (photoUrl.isNotEmpty) {
+      return GestureDetector(
+        onTap: () => _showPhotoDialog(context, photoUrl),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.network(photoUrl, width: 52, height: 52, fit: BoxFit.cover,
+            errorBuilder: (_, e, s) => _placeholder()),
+        ),
+      );
+    }
+    return _placeholder();
+  }
+
+  Widget _placeholder() {
+    return Container(
+      width: 52, height: 52,
+      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
+      child: const Icon(Icons.person, color: Colors.grey),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final startTS = widget.periodData['startTime'] as Timestamp?;
+    final endTS = widget.periodData['endTime'] as Timestamp?;
+    final String timeStr = (startTS != null && endTS != null)
+        ? "${DateFormat('hh:mm a').format(startTS.toDate())} - ${DateFormat('hh:mm a').format(endTS.toDate())}"
+        : "Unknown Time";
+    final String dateStr = widget.periodData['date'] ?? 'Unknown Date';
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F9FB),
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Period Attendance", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.black)),
+              Text("$dateStr | $timeStr", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
+            onPressed: () => Navigator.pop(context),
+          ),
+          bottom: const TabBar(
+            indicatorColor: Color(0xFF6A8A73),
+            labelColor: Color(0xFF6A8A73),
+            unselectedLabelColor: Colors.grey,
+            labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            tabs: [
+              Tab(text: "Reported"),
+              Tab(text: "Not Reported"),
+            ],
+          ),
+        ),
+        body: StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('attendance_logs')
+              .where('periodId', isEqualTo: widget.periodId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
+
+            final Map<String, Map<String, dynamic>> logsMap = {};
+            final Map<String, String> logDocIds = {};
+            for (var doc in snapshot.data!.docs) {
+              final data = doc.data() as Map<String, dynamic>;
+              final uId = data['userId'] as String? ?? '';
+              logsMap[uId] = data;
+              logDocIds[uId] = doc.id;
+            }
+
+            if (widget.studentIds.isEmpty) {
+              return const Center(child: Text("No students enrolled in this class.", style: TextStyle(color: Colors.grey)));
+            }
+
+            final reported    = widget.studentIds.where((id) =>  logsMap.containsKey(id)).toList();
+            final notReported = widget.studentIds.where((id) => !logsMap.containsKey(id)).toList();
+
+            return TabBarView(
+              children: [
+                // ── Tab 0: Reported ──────────────────────────────────────────
+                reported.isEmpty
+                    ? const Center(child: Text("No students have reported yet.", style: TextStyle(color: Colors.grey)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                        itemCount: reported.length,
+                        itemBuilder: (context, index) {
+                          final studentId   = reported[index];
+                          final logData     = logsMap[studentId]!;
+                          final logDocId    = logDocIds[studentId];
+                          final photoUrl    = logData['photoUrl']    as String? ?? '';
+                          final entryStatus = logData['entryStatus'] as String? ?? '';
+                          final isInZone    = logData['isWithinGeofence'] == true;
+
+                          String currentStatus = logData['adminVerifiedStatus'] as String? ?? 'Pending';
+                          if (currentStatus == 'Pending') {
+                            currentStatus = entryStatus == 'Late Window' ? 'Late' : 'Present';
+                          }
+
+                          return FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance.collection('users').doc(studentId).get(),
+                            builder: (context, userSnap) {
+                              String studentName = studentId;
+                              if (userSnap.hasData && userSnap.data!.exists) {
+                                final d = userSnap.data!.data() as Map<String, dynamic>?;
+                                studentName = d?['name'] as String? ?? studentId;
+                              }
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 0,
+                                color: Colors.white,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          _photoAvatar(photoUrl, context),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                                const SizedBox(height: 3),
+                                                if (entryStatus.isNotEmpty)
+                                                  Text(entryStatus, style: TextStyle(
+                                                    fontSize: 11, fontWeight: FontWeight.w600,
+                                                    color: entryStatus == 'Late Window' ? Colors.orange : const Color(0xFF6A8A73),
+                                                  )),
+                                                Row(children: [
+                                                  Icon(isInZone ? Icons.location_on : Icons.location_off, size: 11,
+                                                    color: isInZone ? Colors.green : Colors.red),
+                                                  const SizedBox(width: 3),
+                                                  Text(isInZone ? "In Zone" : "Out of Zone",
+                                                    style: TextStyle(fontSize: 11, color: isInZone ? Colors.green : Colors.red)),
+                                                ]),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      _statusButtons(currentStatus, studentId, logDocId),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+
+                // ── Tab 1: Not Reported ──────────────────────────────────────
+                notReported.isEmpty
+                    ? const Center(child: Text("All students have reported.", style: TextStyle(color: Colors.grey)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                        itemCount: notReported.length,
+                        itemBuilder: (context, index) {
+                          final studentId = notReported[index];
+                          return FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance.collection('users').doc(studentId).get(),
+                            builder: (context, userSnap) {
+                              String studentName = studentId;
+                              if (userSnap.hasData && userSnap.data!.exists) {
+                                final d = userSnap.data!.data() as Map<String, dynamic>?;
+                                studentName = d?['name'] as String? ?? studentId;
+                              }
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 0,
+                                color: Colors.white,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          _placeholder(),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                                const SizedBox(height: 3),
+                                                const Text("No report submitted", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      _statusButtons("", studentId, null),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBtn extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _StatusBtn({required this.label, required this.color, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? color : color.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: selected ? color : color.withValues(alpha: 0.25)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: selected ? Colors.white : color),
+        ),
+      ),
+    );
+  }
+}
+

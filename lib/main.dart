@@ -1,14 +1,8 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:math';
+
 import 'dart:async'; // Required for Splash Screen Timer
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 
 import 'firebase_options.dart';
 import 'home_page.dart';
@@ -158,12 +152,6 @@ class _LoginPageState extends State<LoginPage>
     with SingleTickerProviderStateMixin {
   final uniqueCodeController = TextEditingController();
   final passwordController = TextEditingController();
-  File? _loginPhoto;
-
-  static const String _backendBaseUrl =
-      "https://pasteshub-navikarana-backend.hf.space";
-
-  static const String _loginFaceEndpoint = "$_backendBaseUrl/login-face";
 
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
@@ -190,92 +178,11 @@ class _LoginPageState extends State<LoginPage>
     super.dispose();
   }
 
-  Future<_FaceVerificationResult> _verifyFaceWithBackend() async {
-    if (_loginPhoto == null) {
-      return _FaceVerificationResult(
-        verified: false,
-        errorMessage: "No photo selected.",
-      );
-    }
 
-    try {
-      final request =
-          http.MultipartRequest('POST', Uri.parse(_loginFaceEndpoint));
-
-      request.fields['username'] = uniqueCodeController.text.trim();
-      request.files.add(
-        await http.MultipartFile.fromPath('image', _loginPhoto!.path),
-      );
-
-      final streamedResponse = await request.send();
-      final responseBody = await streamedResponse.stream.bytesToString();
-
-      debugPrint("Face login backend status: ${streamedResponse.statusCode}");
-      debugPrint("Face login backend body: $responseBody");
-
-      final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
-
-      if (decoded['verified'] == true) {
-        return _FaceVerificationResult(verified: true);
-      }
-
-      final reason = decoded['error'] as String? ?? "Face not recognised.";
-      return _FaceVerificationResult(verified: false, errorMessage: reason);
-    } catch (e) {
-      debugPrint("Face login network error: $e");
-      return _FaceVerificationResult(
-        verified: false,
-        errorMessage:
-            "Could not reach the server. Please check your connection.",
-      );
-    }
-  }
-
-  Future<void> _pickPhoto() async {
-    if (Platform.isWindows) {
-      final htmlPath =
-          '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
-      await launchUrl(Uri.file(htmlPath),
-          mode: LaunchMode.externalApplication);
-
-      final downloadsDir = Directory(
-          '${Platform.environment['USERPROFILE']}\\Downloads');
-      final startTime = DateTime.now();
-
-      while (DateTime.now().difference(startTime).inSeconds < 15) {
-        final files = downloadsDir
-            .listSync()
-            .whereType<File>()
-            .where((f) =>
-                f.path.endsWith('captured_photo.png') &&
-                f.lastModifiedSync().isAfter(startTime))
-            .toList();
-
-        if (files.isNotEmpty) {
-          setState(() => _loginPhoto = files.first);
-          return;
-        }
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-      return;
-    }
-
-    final XFile? photo = await ImagePicker().pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.front,
-      maxWidth: 640,
-      maxHeight: 640,
-      imageQuality: 100,
-    );
-
-    if (photo != null) {
-      setState(() => _loginPhoto = File(photo.path));
-    }
-  }
 
   Future<void> _login() async {
-    if (_loginPhoto == null) {
-      _showSnackBar("A selfie is required to clock in.");
+    if (uniqueCodeController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
+      _showSnackBar("Please enter your unique code and password.");
       return;
     }
 
@@ -326,113 +233,12 @@ class _LoginPageState extends State<LoginPage>
       final doc = query.docs.first;
       final data = doc.data();
 
-      statusText.value = "Analyzing Biometrics...";
-
-      final faceResult = await _verifyFaceWithBackend();
-
-      final bytes = await _loginPhoto!.readAsBytes();
-      final String base64Image = base64Encode(bytes);
-
-      if (!faceResult.verified) {
-        await FirebaseFirestore.instance.collection('attendance_logs').add({
-          'userId': doc.id,
-          'name': data['name'],
-          'username': data['username'],
-          'timestamp': FieldValue.serverTimestamp(),
-          'photoBase64': base64Image,
-          'status': 'Face Not Recognized',
-        });
-
-        _dismissDialogAndShow(
-            statusText, faceResult.errorMessage ?? "Face not recognised.");
-        return;
-      }
-
-      statusText.value = "Verifying Location...";
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission != LocationPermission.always &&
-          permission != LocationPermission.whileInUse) {
-        _dismissDialogAndShow(statusText, "Location permission is required.");
-        return;
-      }
-
-      final currentPosition = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.best);
-
-      if (Platform.isAndroid && currentPosition.isMocked) {
-        _dismissDialogAndShow(statusText, "Fake GPS detected. Access denied.");
-        return;
-      }
-
-      final double realTimeLat = currentPosition.latitude;
-      final double realTimeLng = currentPosition.longitude;
-
-      statusText.value = "Checking Geofence...";
-
-      if (data['boundary'] == null) {
-        _dismissDialogAndShow(
-            statusText, "Boundary not set by admin. Contact your administrator.");
-        return;
-      }
-
-      final boundaryData = Map<String, dynamic>.from(data['boundary']);
-      final boundaryLat = boundaryData['lat'];
-      final boundaryLng = boundaryData['lng'];
-
-      if (boundaryLat == null || boundaryLng == null) {
-        _dismissDialogAndShow(
-            statusText, "Invalid boundary configuration. Contact your administrator.");
-        return;
-      }
-
-      final distance = _calculateDistanceMeters(
-          realTimeLat, realTimeLng, boundaryLat, boundaryLng);
-
-      if (distance > 20) {
-        await FirebaseFirestore.instance.collection('attendance_logs').add({
-          'userId': doc.id,
-          'name': data['name'],
-          'username': data['username'],
-          'timestamp': FieldValue.serverTimestamp(),
-          'photoBase64': base64Image,
-          'location': {'lat': realTimeLat, 'lng': realTimeLng},
-          'status': 'Location Mismatch',
-        });
-
-        if (mounted) Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                "Access denied: ${distance.toStringAsFixed(1)}m outside boundary."),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
       statusText.value = "Finalizing...";
-
-      await FirebaseFirestore.instance.collection('attendance_logs').add({
-        'userId': doc.id,
-        'name': data['name'],
-        'username': data['username'],
-        'timestamp': FieldValue.serverTimestamp(),
-        'photoBase64': base64Image,
-        'location': {'lat': realTimeLat, 'lng': realTimeLng},
-        'status': 'Present',
-      });
 
       await FirebaseFirestore.instance
           .collection('users')
           .doc(doc.id)
           .update({
-        'latitude': realTimeLat,
-        'longitude': realTimeLng,
         'lastLogin': FieldValue.serverTimestamp(),
       });
 
@@ -443,10 +249,8 @@ class _LoginPageState extends State<LoginPage>
         context,
         MaterialPageRoute(
           builder: (_) => HomePage(
-            name: data['name'],
-            latitude: realTimeLat,
-            longitude: realTimeLng,
-            photo: _loginPhoto,
+            name: data['name'] ?? "User",
+            username: data['username'] ?? "Unknown",
           ),
         ),
       );
@@ -468,18 +272,7 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 
-  double _calculateDistanceMeters(
-      double lat1, double lon1, double lat2, double lon2) {
-    const double earthRadius = 6371000;
-    final double dLat = (lat2 - lat1) * (pi / 180);
-    final double dLon = (lon2 - lon1) * (pi / 180);
-    final double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * (pi / 180)) *
-            cos(lat2 * (pi / 180)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
-    return earthRadius * (2 * atan2(sqrt(a), sqrt(1 - a)));
-  }
+
 
   InputDecoration _modernInput(String label, IconData icon) {
     return InputDecoration(
@@ -601,57 +394,6 @@ class _LoginPageState extends State<LoginPage>
                             decoration:
                                 _modernInput("Password", Icons.lock_outline),
                           ),
-                          const SizedBox(height: 20),
-                          GestureDetector(
-                            onTap: _pickPhoto,
-                            child: Container(
-                              height: 160,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: _loginPhoto == null
-                                      ? Colors.grey.shade200
-                                      : const Color(0xFF6A8A73),
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.02),
-                                    blurRadius: 10,
-                                  ),
-                                ],
-                              ),
-                              child: _loginPhoto != null
-                                  ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(18),
-                                      child: Image.file(
-                                        _loginPhoto!,
-                                        fit: BoxFit.cover,
-                                        width: double.infinity,
-                                      ),
-                                    )
-                                  : Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                            Icons.face_retouching_natural_rounded,
-                                            size: 40,
-                                            color: Colors.grey.shade400),
-                                        const SizedBox(height: 10),
-                                        Text(
-                                          "Capture Selfie Verification",
-                                          style: TextStyle(
-                                            color: Colors.grey.shade600,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                            ),
-                          ),
                           const SizedBox(height: 40),
                           SizedBox(
                             width: double.infinity,
@@ -666,7 +408,7 @@ class _LoginPageState extends State<LoginPage>
                                 ),
                               ),
                               child: const Text(
-                                "Verify & Clock In",
+                                "Sign In",
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -758,9 +500,4 @@ class _LoginPageState extends State<LoginPage>
     );
   }
 }
-
-class _FaceVerificationResult {
-  final bool verified;
-  final String? errorMessage;
-  _FaceVerificationResult({required this.verified, this.errorMessage});
-}
+

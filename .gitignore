@@ -3,10 +3,10 @@
 venv/
 .venv/
 env/
-bin/
-lib/
-include/
-share/
+# bin/
+# lib/
+# include/
+# share/
 __pycache__/
 *.pyc
 *.pyo

@@ -31,3 +31,6 @@ build/
 .vscode/
 *.iml
 .DS_Store
+android/app/google-services.json
+lib/firebase_options.dart
+lib/generated_plugin_registrant.dart

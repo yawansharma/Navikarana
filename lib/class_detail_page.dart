@@ -402,12 +402,28 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 20), onPressed: () => Navigator.pop(context)),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.className, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
-            Text(widget.classId, style: GoogleFonts.poppins(fontSize: 11, color: Colors.white60)),
-          ],
+        title: Hero(
+          tag: 'class_header_${widget.classId}',
+          child: Material(
+            color: Colors.transparent,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(widget.className,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold, fontSize: 18)),
+                Text(widget.classId,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, color: Colors.white60)),
+              ],
+            ),
+          ),
         ),
         actions: [
           IconButton(

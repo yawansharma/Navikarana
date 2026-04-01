@@ -270,48 +270,77 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 classData: data,
                                 adminName: widget.adminName,
                               ),
-                              transitionsBuilder: (_, anim, __, child) {
-                                final slide = Tween(begin: const Offset(0, 1), end: Offset.zero)
-                                    .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic));
-                                return SlideTransition(position: slide, child: child);
+                              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                const begin = Offset(0.0, 0.2);
+                                const end = Offset.zero;
+                                const curve = Curves.fastOutSlowIn;
+
+                                var slideTween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                                var fadeTween = Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeIn));
+                                var scaleTween = Tween<double>(begin: 0.98, end: 1.0).chain(CurveTween(curve: curve));
+
+                                return FadeTransition(
+                                  opacity: animation.drive(fadeTween),
+                                  child: ScaleTransition(
+                                    scale: animation.drive(scaleTween),
+                                    child: SlideTransition(
+                                      position: animation.drive(slideTween),
+                                      child: child,
+                                    ),
+                                  ),
+                                );
                               },
-                              transitionDuration: const Duration(milliseconds: 350),
+                              transitionDuration: const Duration(milliseconds: 400),
                             ),
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.all(18),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F4F2),
-                                    borderRadius: BorderRadius.circular(14),
+                                Hero(
+                                  tag: 'class_icon_${classDoc.id}',
+                                  child: Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F4F2),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: const Icon(Icons.class_,
+                                        color: Color(0xFF6A8A73), size: 24),
                                   ),
-                                  child: const Icon(Icons.class_,
-                                      color: Color(0xFF6A8A73), size: 24),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        data['className'] ?? "Unknown Class",
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15),
+                                  child: Hero(
+                                    tag: 'class_header_${classDoc.id}',
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            data['className'] ?? "Unknown Class",
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "Code: ${data['classCode'] ?? classDoc.id}",
+                                            style: TextStyle(
+                                                color: Colors.grey.shade500,
+                                                fontSize: 11),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        "Code: ${data['classCode'] ?? classDoc.id}",
-                                        style: TextStyle(
-                                            color: Colors.grey.shade500,
-                                            fontSize: 12),
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ),
                                 Column(
@@ -1604,16 +1633,28 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
           icon: const Icon(Icons.arrow_back_ios_new),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_className,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 17)),
-            Text("Code: $_classCode",
-                style:
-                    const TextStyle(fontSize: 11, color: Colors.white60)),
-          ],
+        title: Hero(
+          tag: 'class_header_${widget.classId}',
+          child: Material(
+            color: Colors.transparent,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_className,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold, fontSize: 17)),
+                Text("Code: $_classCode",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(fontSize: 11, color: Colors.white60)),
+              ],
+            ),
+          ),
         ),
         actions: [
           IconButton(
@@ -2062,7 +2103,7 @@ class _PeriodsManagementSectionState extends State<_PeriodsManagementSection> {
                           elevation: 0,
                           color: Colors.grey.shade50,
                           child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             leading: const Icon(Icons.class_, color: Color(0xFF6A8A73), size: 24),
                             title: Text(timeStr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                             trailing: Row(

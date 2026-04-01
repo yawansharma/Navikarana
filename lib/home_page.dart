@@ -199,29 +199,91 @@ class HomePage extends StatelessWidget {
                                         Container(width: 5, color: AppTheme.kGreen),
                                         Expanded(
                                           child: ListTile(
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                            title: Text(
-                                              data['className'] ?? "Unknown Class",
-                                              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15),
-                                            ),
-                                            subtitle: Padding(
-                                              padding: const EdgeInsets.only(top: 4),
-                                              child: Text(
-                                                "Code: ${data['classCode'] ?? 'Unknown'}",
-                                                style: AppTheme.labelSmall,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                            title: Hero(
+                                              tag: 'class_header_${doc.id}',
+                                              child: Material(
+                                                color: Colors.transparent,
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      data['className'] ?? "Unknown Class",
+                                                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    Text(
+                                                      "Code: ${data['classCode'] ?? 'Unknown'}",
+                                                      style: AppTheme.labelSmall.copyWith(fontSize: 11),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
+                                            subtitle: null,
                                             trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
                                             onTap: () {
                                               Navigator.push(
                                                 context,
-                                                MaterialPageRoute(
-                                                  builder: (_) => ClassDetailPage(
+                                                PageRouteBuilder(
+                                                  pageBuilder: (_, anim, sa) =>
+                                                      ClassDetailPage(
                                                     classId: doc.id,
-                                                    className: data['className'] ?? 'Class',
-                                                    boundary: data['boundary'] as Map<String, dynamic>?,
+                                                    className:
+                                                        data['className'] ??
+                                                            'Class',
+                                                    boundary: data['boundary']
+                                                        as Map<String,
+                                                            dynamic>?,
                                                     username: username,
                                                   ),
+                                                  transitionsBuilder: (context,
+                                                      animation,
+                                                      secondaryAnimation,
+                                                      child) {
+                                                    const begin =
+                                                        Offset(0.0, 0.2);
+                                                    const end = Offset.zero;
+                                                    const curve =
+                                                        Curves.fastOutSlowIn;
+
+                                                    var slideTween =
+                                                        Tween(begin: begin, end: end)
+                                                            .chain(CurveTween(
+                                                                curve: curve));
+                                                    var fadeTween = Tween<
+                                                                double>(
+                                                            begin: 0.0, end: 1.0)
+                                                        .chain(CurveTween(
+                                                            curve:
+                                                                Curves.easeIn));
+                                                    var scaleTween = Tween<
+                                                                double>(
+                                                            begin: 0.98, end: 1.0)
+                                                        .chain(CurveTween(
+                                                            curve: curve));
+
+                                                    return FadeTransition(
+                                                      opacity: animation
+                                                          .drive(fadeTween),
+                                                      child: ScaleTransition(
+                                                        scale: animation
+                                                            .drive(scaleTween),
+                                                        child: SlideTransition(
+                                                          position: animation
+                                                              .drive(slideTween),
+                                                          child: child,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                  transitionDuration:
+                                                      const Duration(
+                                                          milliseconds: 400),
                                                 ),
                                               );
                                             },

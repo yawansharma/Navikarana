@@ -1,4 +1,4 @@
-import 'dart:math'; // For Random Captcha
+﻿import 'dart:math'; // For Random Captcha
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'admin_home_page.dart'; 
@@ -400,7 +400,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                         BlendMode.srcATop,
                                       ),
                                       child: Image.asset(
-                                        'assets/navikarnaNew.png',
+                                        'assets/upasthiti.png',
                                         width: 90, 
                                         fit: BoxFit.contain,
                                       ),
@@ -408,7 +408,11 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
+<<<<<<< Updated upstream
                                     "POWERED BY NAVIKARANA",
+=======
+                                    "POWERED BY navIKaraNa",
+>>>>>>> Stashed changes
                                     style: TextStyle(
                                       color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
                                       fontSize: 10,

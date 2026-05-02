@@ -116,7 +116,11 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
+<<<<<<< Updated upstream
                     "Navikarana Executive",
+=======
+                    "upasthiti Executive",
+>>>>>>> Stashed changes
                     style: TextStyle(
                       color: goldAccent,
                       fontWeight: FontWeight.bold,

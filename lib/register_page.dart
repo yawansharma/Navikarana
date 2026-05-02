@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
@@ -413,6 +413,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                   const Color(0xFF6A8A73).withOpacity(0.1), 
                                   BlendMode.srcATop,
                                 ),
+<<<<<<< Updated upstream
                                 child: Image.asset(
                                   'assets/navikarnaNew.png',
                                   width: 90, 
@@ -428,6 +429,29 @@ class _RegisterPageState extends State<RegisterPage> {
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 1.5,
+=======
+                                child: ColorFiltered(
+                                  colorFilter: ColorFilter.mode(
+                                    const Color(0xFF6A8A73).withValues(alpha: 0.1),
+                                    BlendMode.srcATop,
+                                  ),
+                                  child: Image.asset(
+                                    'assets/upasthiti.png',
+                                    width: 90,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                "POWERED BY navIKaraNa",
+                                style: TextStyle(
+                                  color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.5,
+                                ),
+>>>>>>> Stashed changes
                               ),
                             ),
                           ],

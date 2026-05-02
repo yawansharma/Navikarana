@@ -1,4 +1,4 @@
-import 'dart:async'; // Required for Splash Screen Timer
+﻿import 'dart:async'; // Required for Splash Screen Timer
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -448,11 +448,26 @@ class _LoginPageState extends State<LoginPage> {
                                         blurRadius: 20,
                                         spreadRadius: 2,
                                       ),
+<<<<<<< Updated upstream
                                     ],
                                   ),
                                   child: ColorFiltered(
                                     colorFilter: ColorFilter.mode(
                                       const Color(
+=======
+                                      child: Image.asset(
+                                        'assets/upasthiti.png',
+                                        width: 90,
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "POWERED BY navIKaraNa",
+                                    style: TextStyle(
+                                      color: const Color(
+>>>>>>> Stashed changes
                                         0xFF6A8A73,
                                       ).withValues(alpha: 0.1),
                                       BlendMode.srcATop,

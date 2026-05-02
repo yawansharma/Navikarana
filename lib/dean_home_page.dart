@@ -358,9 +358,58 @@ class _AdminListTabState extends State<_AdminListTab> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: selectedDept,
+<<<<<<< Updated upstream
                 decoration: InputDecoration(labelText: 'Department', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
                 items: departments.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
                 onChanged: (v) => setSheetState(() => selectedDept = v!),
+=======
+                decoration: InputDecoration(
+                    labelText: 'Department',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12))),
+                items: departments
+                    .map((d) =>
+                        DropdownMenuItem(value: d, child: Text(d)))
+                    .toList(),
+                onChanged: (v) =>
+                    setSheetState(() => selectedDept = v!),
+              ),
+              const SizedBox(height: 16),
+              Text("Admin Level",
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Row(
+                children: [1, 2, 3].map((level) {
+                  final selected = selectedLevel == level;
+                  return GestureDetector(
+                    onTap: () => setSheetState(() => selectedLevel = level),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      margin: const EdgeInsets.only(right: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: selected ? kDeanDark : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: selected ? kDeanDark : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Text(
+                        "Level $level",
+                        style: TextStyle(
+                          color: selected ? kDeanGold : Colors.grey.shade600,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+>>>>>>> Stashed changes
               ),
               const SizedBox(height: 30),
               SizedBox(

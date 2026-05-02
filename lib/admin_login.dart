@@ -1,9 +1,12 @@
 import 'dart:math'; // For Random Captcha
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/models.dart' as models;
+
 import 'admin_home_page.dart'; 
 import 'main.dart'; // Import main to navigate back to User Login
 import 'app_theme.dart';
+import 'services/appwrite_service.dart'; // Make sure this path is correct for your project
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -101,20 +104,24 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     );
 
     try {
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('username', isEqualTo: adminId)
-          .where('password', isEqualTo: password)
-          .get();
+      // Use Appwrite query instead of Firestore
+      final query = await AppwriteService.databases.listDocuments(
+        databaseId: 'main_db',
+        collectionId: 'users',
+        queries: [
+          Query.equal('username', adminId),
+          Query.equal('password', password),
+        ],
+      );
 
-      if (query.docs.isEmpty) {
+      if (query.documents.isEmpty) {
         _dismissAndShowError("Invalid Admin ID or Password");
         _generateCaptcha();
         return;
       }
 
-      final doc = query.docs.first;
-      final data = doc.data();
+      final doc = query.documents.first;
+      final data = doc.data;
 
       // RBAC Security Check
       final role = data['role'] as String?;
@@ -133,9 +140,15 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
 
       statusText.value = "Finalizing...";
 
-      await FirebaseFirestore.instance.collection('users').doc(doc.id).update({
-        'lastLogin': FieldValue.serverTimestamp(),
-      });
+      // Update last login using ISO-8601 instead of FieldValue.serverTimestamp()
+      await AppwriteService.databases.updateDocument(
+        databaseId: 'main_db',
+        collectionId: 'users',
+        documentId: doc.$id,
+        data: {
+          'lastLogin': DateTime.now().toIso8601String(),
+        },
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -160,8 +173,6 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {

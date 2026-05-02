@@ -107,12 +107,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         ),
       );
       
-      // Construct the view URL (Update Endpoint and Project ID here to match your Appwrite setup)
-      // Make sure the bucket permissions allow read access for users to view these URLs
-      const String endpoint = "https://YOUR_APPWRITE_ENDPOINT/v1"; 
-      const String projectId = "YOUR_PROJECT_ID";
-      
-      return "$endpoint/storage/buckets/attendance_photos/files/${file.$id}/view?project=$projectId";
+      return "${AppwriteService.endpoint}/storage/buckets/attendance_photos/files/${file.$id}/view?project=${AppwriteService.projectId}";
     } catch (_) {
       return null;
     }

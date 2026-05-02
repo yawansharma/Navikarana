@@ -176,8 +176,8 @@ class _RegisterPageState extends State<RegisterPage> {
       'username': uniqueCodeController.text.trim(),
       'password': passwordController.text.trim(),
       'department': _selectedSchool,
-      'latitude': latitude?.toString(),
-      'longitude': longitude?.toString(),
+      'latitude': latitude,
+      'longitude': longitude,
     },
   );
 }

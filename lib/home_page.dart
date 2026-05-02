@@ -1,4 +1,5 @@
-﻿import 'dart:async';
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
@@ -346,7 +347,10 @@ class _HomePageState extends State<HomePage> {
                                   size: 16,
                                   color: Colors.grey),
                               onTap: () {
-                                final boundary = data['boundary'];
+                              final _rawBoundary = data['boundary'];
+                                final boundary = _rawBoundary is String && _rawBoundary.isNotEmpty
+                                    ? (jsonDecode(_rawBoundary) as Map<String, dynamic>)
+                                    : (_rawBoundary is Map<String, dynamic> ? _rawBoundary : null);
                                 Navigator.push(
                                   context,
                                   PageRouteBuilder(
@@ -355,9 +359,7 @@ class _HomePageState extends State<HomePage> {
                                       classId: doc.$id,
                                       className:
                                           data['className'] ?? 'Class',
-                                      boundary: boundary is Map<String, dynamic>
-                                          ? boundary
-                                          : null,
+                                      boundary: boundary,
                                       username: widget.username,
                                     ),
                                     transitionsBuilder: (context, animation,
@@ -626,17 +628,17 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
                         height: 28,
                         child: ElevatedButton(
                           onPressed: () {
-                            final boundary = period['boundary'];
+                            final _rawBoundary = period['boundary'];
+                            final boundary = _rawBoundary is String && _rawBoundary.isNotEmpty
+                                ? (jsonDecode(_rawBoundary) as Map<String, dynamic>)
+                                : (_rawBoundary is Map<String, dynamic> ? _rawBoundary : null);
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ClassDetailPage(
                                   classId: period['classId'],
                                   className: period['className'],
-                                  boundary:
-                                      boundary is Map<String, dynamic>
-                                          ? boundary
-                                          : null,
+                                  boundary: boundary,
                                   username: widget.username,
                                 ),
                               ),

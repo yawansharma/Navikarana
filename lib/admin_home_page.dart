@@ -1,4 +1,5 @@
-﻿import 'dart:io';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -351,7 +352,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   final data = classDoc.data;
                   final List<dynamic> studentIds =
                       data['studentIds'] as List<dynamic>? ?? [];
-                  final bool hasBoundary = data['boundary'] != null;
+                  final bool hasBoundary = data['boundary'] != null && data['boundary'].toString().isNotEmpty;
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 14),
@@ -616,7 +617,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             'adminName': widget.adminName,
                             'createdBy': widget.adminId,
                             'studentIds': <String>[],
-                            'boundary': pendingBoundary,
+                            'boundary': jsonEncode(pendingBoundary),
                           },
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
@@ -1550,9 +1551,12 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
       _classData['classCode'] as String? ?? widget.classId;
 
   void _openBoundaryPicker() async {
-    final boundary = _classData['boundary'];
+    final _rawBoundary = _classData['boundary'];
+    final Map<String, dynamic>? boundary = _rawBoundary is String && _rawBoundary.isNotEmpty
+        ? (jsonDecode(_rawBoundary) as Map<String, dynamic>)
+        : (_rawBoundary is Map<String, dynamic> ? _rawBoundary : null);
     LatLng pos;
-    if (boundary != null && boundary is Map) {
+    if (boundary != null) {
       pos = LatLng((boundary['lat'] as num).toDouble(),
           (boundary['lng'] as num).toDouble());
     } else {
@@ -1565,7 +1569,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
       }
     }
     if (!mounted) return;
-    double radius = (boundary != null && boundary is Map)
+    double radius = boundary != null
         ? (boundary['radiusMeters'] as num).toDouble()
         : 100.0;
     LatLng current = pos;
@@ -1742,7 +1746,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                       collectionId: 'classes',
                                       documentId: widget.classId,
                                       data: {
-                                        'boundary': newBoundary
+                                        'boundary': jsonEncode(newBoundary)
                                       },
                                     );
                                     setState(() =>
@@ -2003,22 +2007,33 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (hasBoundary &&
-                              _classData['boundary'] is Map) ...[
-                            Text(
-                              "Lat: ${(_classData['boundary']['lat'] as num).toStringAsFixed(5)},  "
-                              "Lng: ${(_classData['boundary']['lng'] as num).toStringAsFixed(5)}",
-                              style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
-                                  fontFamily: 'Courier'),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              "Radius: ${(_classData['boundary']['radiusMeters'] as num).toStringAsFixed(0)} m",
-                              style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12),
-                            ),
+                              _classData['boundary'] != null && _classData['boundary'].toString().isNotEmpty) ...[
+                            Builder(builder: (_) {
+                              final rawB = _classData['boundary'];
+                              final bMap = rawB is String
+                                  ? (jsonDecode(rawB) as Map<String, dynamic>)
+                                  : (rawB as Map<String, dynamic>? ?? {});
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Lat: ${(bMap['lat'] as num).toStringAsFixed(5)},  "
+                                    "Lng: ${(bMap['lng'] as num).toStringAsFixed(5)}",
+                                    style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12,
+                                        fontFamily: 'Courier'),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "Radius: ${(bMap['radiusMeters'] as num).toStringAsFixed(0)} m",
+                                    style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12),
+                                  ),
+                                ],
+                              );
+                            }),
                             const SizedBox(height: 12),
                           ],
                           SizedBox(

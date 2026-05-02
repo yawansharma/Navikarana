@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:file_picker/file_picker.dart';
@@ -9,7 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'services/appwrite_service.dart';
 
 // =============================================================================
-// CommunityPage — two tabs: Channel + Direct Messages
+// CommunityPage â€” two tabs: Channel + Direct Messages
 //
 // Appwrite collection: community_messages
 //   Fields: classId (string), channel (string), senderId (string),
@@ -78,7 +78,7 @@ class CommunityPage extends StatelessWidget {
         body: RisingSheet(
           child: TabBarView(
             children: [
-              // ── Tab 0: Public class channel ───────────────────────────────
+              // â”€â”€ Tab 0: Public class channel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               _ChatView(
                 classId: classId,
                 channel: 'channel',
@@ -86,7 +86,7 @@ class CommunityPage extends StatelessWidget {
                 isAdmin: isAdmin,
                 showSenderName: true,
               ),
-              // ── Tab 1: Direct Messages ────────────────────────────────────
+              // â”€â”€ Tab 1: Direct Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               isAdmin
                   ? _AdminDmListTab(
                       classId: classId,
@@ -109,7 +109,7 @@ class CommunityPage extends StatelessWidget {
 }
 
 // =============================================================================
-// Generic chat view — reused for channel and student DM
+// Generic chat view â€” reused for channel and student DM
 // =============================================================================
 class _ChatView extends StatefulWidget {
   final String classId;
@@ -164,7 +164,7 @@ class _ChatViewState extends State<_ChatView> {
   Future<void> _fetchMessages() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'community_messages',
         queries: [
           Query.equal('classId', widget.classId),
@@ -204,7 +204,7 @@ class _ChatViewState extends State<_ChatView> {
     setState(() => _sending = true);
     try {
       await AppwriteService.databases.createDocument(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'community_messages',
         documentId: ID.unique(),
         data: {
@@ -256,7 +256,7 @@ class _ChatViewState extends State<_ChatView> {
           '/files/${uploaded.$id}/view?project=${AppwriteService.projectId}';
 
       await AppwriteService.databases.createDocument(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'community_messages',
         documentId: ID.unique(),
         data: {
@@ -330,7 +330,7 @@ class _ChatViewState extends State<_ChatView> {
 }
 
 // =============================================================================
-// Admin DM list — lists enrolled students, tap to open thread
+// Admin DM list â€” lists enrolled students, tap to open thread
 // =============================================================================
 class _AdminDmListTab extends StatelessWidget {
   final String classId;
@@ -364,7 +364,7 @@ class _AdminDmListTab extends StatelessWidget {
           final studentId = studentIds[i];
           return FutureBuilder<models.Document>(
             future: AppwriteService.databases.getDocument(
-              databaseId: 'main_db',
+              databaseId: '69ecebfb0033cf785741',
               collectionId: 'users',
               documentId: studentId,
             ),
@@ -431,7 +431,7 @@ class _AdminDmListTab extends StatelessWidget {
 }
 
 // =============================================================================
-// Full-screen DM thread page — admin navigates here
+// Full-screen DM thread page â€” admin navigates here
 // =============================================================================
 class _DmThreadPage extends StatelessWidget {
   final String classId;

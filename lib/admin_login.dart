@@ -1,4 +1,4 @@
-import 'dart:math'; // For Random Captcha
+﻿import 'dart:math'; // For Random Captcha
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
@@ -52,7 +52,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     super.dispose();
   }
 
-  // 🎲 GENERATE RANDOM CAPTCHA
+  // ðŸŽ² GENERATE RANDOM CAPTCHA
   void _generateCaptcha() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Excluded confusing chars like I, 1, 0, O
     setState(() {
@@ -60,7 +60,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     });
   }
 
-  // 🔐 LOGIN LOGIC
+  // ðŸ” LOGIN LOGIC
   Future<void> _login() async {
     // 1. Check Captcha
     if (captchaController.text.toUpperCase().trim() != _generatedCaptcha) {
@@ -106,7 +106,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     try {
       // Use Appwrite query instead of Firestore
       final query = await AppwriteService.databases.listDocuments(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'users',
         queries: [
           Query.equal('username', adminId),
@@ -142,7 +142,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
 
       // Update last login using ISO-8601 instead of FieldValue.serverTimestamp()
       await AppwriteService.databases.updateDocument(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'users',
         documentId: doc.$id,
         data: {
@@ -279,7 +279,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                           ),
                           const SizedBox(height: 24),
 
-                          // 🛡️ CAPTCHA SECTION (Polished UI)
+                          // ðŸ›¡ï¸ CAPTCHA SECTION (Polished UI)
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(

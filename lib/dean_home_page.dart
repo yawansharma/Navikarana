@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
@@ -316,7 +316,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
 
       statusNotifier.value = "Migrating classes...";
       final classDocs = await AppwriteService.databases.listDocuments(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'classes',
         queries: [Query.limit(5000)],
       );
@@ -325,7 +325,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
         if (data['createdBy'] == null ||
             data['createdBy'].toString().isEmpty) {
           await AppwriteService.databases.updateDocument(
-            databaseId: 'main_db',
+            databaseId: '69ecebfb0033cf785741',
             collectionId: 'classes',
             documentId: doc.$id,
             data: {'createdBy': 'dean_master', 'adminName': 'Master Dean'},
@@ -336,7 +336,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
 
       statusNotifier.value = "Migrating attendance logs...";
       final logDocs = await AppwriteService.databases.listDocuments(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'attendance_logs',
         queries: [Query.limit(5000)],
       );
@@ -345,7 +345,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
         if (data['adminId'] == null ||
             data['adminId'].toString().isEmpty) {
           await AppwriteService.databases.updateDocument(
-            databaseId: 'main_db',
+            databaseId: '69ecebfb0033cf785741',
             collectionId: 'attendance_logs',
             documentId: doc.$id,
             data: {'adminId': 'dean_master'},
@@ -409,7 +409,7 @@ class _AdminListTabState extends State<_AdminListTab> {
   Future<void> _fetchAdmins() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'users',
         queries: [Query.equal('role', 'admin')],
       );
@@ -509,7 +509,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                             // Check if username already exists
                             final exists = await AppwriteService.databases
                                 .listDocuments(
-                              databaseId: 'main_db',
+                              databaseId: '69ecebfb0033cf785741',
                               collectionId: 'users',
                               queries: [
                                 Query.equal('username',
@@ -528,7 +528,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                             }
 
                             await AppwriteService.databases.createDocument(
-                              databaseId: 'main_db',
+                              databaseId: '69ecebfb0033cf785741',
                               collectionId: 'users',
                               documentId: ID.unique(),
                               data: {
@@ -628,7 +628,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold)),
                         Text(
-                            "${data['department'] ?? 'No Dept'} • ${data['username']}",
+                            "${data['department'] ?? 'No Dept'} â€¢ ${data['username']}",
                             style: TextStyle(
                                 color: Colors.grey.shade600,
                                 fontSize: 13)),
@@ -697,7 +697,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                     onPressed: () async {
                       if (passCtrl.text.trim().isEmpty) return;
                       await AppwriteService.databases.updateDocument(
-                        databaseId: 'main_db',
+                        databaseId: '69ecebfb0033cf785741',
                         collectionId: 'users',
                         documentId: doc.$id,
                         data: {'password': passCtrl.text.trim()},
@@ -733,7 +733,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                         color: Colors.grey.shade500)),
                 onTap: () async {
                   await AppwriteService.databases.updateDocument(
-                    databaseId: 'main_db',
+                    databaseId: '69ecebfb0033cf785741',
                     collectionId: 'users',
                     documentId: doc.$id,
                     data: {
@@ -782,7 +782,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                   );
                   if (confirm == true) {
                     await AppwriteService.databases.deleteDocument(
-                      databaseId: 'main_db',
+                      databaseId: '69ecebfb0033cf785741',
                       collectionId: 'users',
                       documentId: doc.$id,
                     );
@@ -915,7 +915,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                                         ),
                                         const SizedBox(width: 8),
                                         Text(
-                                            "•  ${data['username']}",
+                                            "â€¢  ${data['username']}",
                                             style: TextStyle(
                                                 fontSize: 12,
                                                 color: Colors

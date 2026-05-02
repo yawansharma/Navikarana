@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'main.dart'; // Import main to navigate back
 import 'dean_home_page.dart';
 import 'app_theme.dart';
@@ -22,7 +22,7 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
     super.dispose();
   }
 
-  // 🔐 DEAN LOGIN LOGIC (Hardcoded for maximum security as requested)
+  // ðŸ” DEAN LOGIN LOGIC (Hardcoded for maximum security as requested)
   Future<void> _login() async {
     final deanId = usernameController.text.trim();
     final password = passwordController.text.trim();

@@ -1,4 +1,4 @@
-import 'dart:async'; // Required for Splash Screen Timer
+﻿import 'dart:async'; // Required for Splash Screen Timer
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'register_page.dart';
@@ -216,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
       final password = passwordController.text.trim();
 
       final response = await AppwriteService.databases.listDocuments(
-  databaseId: 'main_db',
+  databaseId: '69ecebfb0033cf785741',
   collectionId: 'users',
   queries: [
     Query.equal('username', uniqueCode),
@@ -244,7 +244,7 @@ final data = response.documents.first.data;
       statusText.value = "Finalizing...";
 
       await AppwriteService.databases.updateDocument(
-  databaseId: 'main_db',
+  databaseId: '69ecebfb0033cf785741',
   collectionId: 'users',
   documentId: response.documents.first.$id,
   data: {
@@ -437,50 +437,52 @@ final data = response.documents.first.data;
                         // --- PNG EFFECT LOGO FOOTER ---
                         const SizedBox(height: 50),
                         Center(
-                          child: Opacity(
-                            opacity: 0.6,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(
+                          child: RepaintBoundary(
+                            child: Opacity(
+                              opacity: 0.6,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF6A8A73,
+                                          ).withValues(alpha: 0.15),
+                                          blurRadius: 20,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
+                                    ),
+                                    child: ColorFiltered(
+                                      colorFilter: ColorFilter.mode(
+                                        const Color(
                                           0xFF6A8A73,
-                                        ).withValues(alpha: 0.15),
-                                        blurRadius: 20,
-                                        spreadRadius: 2,
+                                        ).withValues(alpha: 0.1),
+                                        BlendMode.srcATop,
                                       ),
-                                    ],
+                                      child: Image.asset(
+                                        'assets/navikarnaNew.png',
+                                        width: 90,
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
                                   ),
-                                  child: ColorFiltered(
-                                    colorFilter: ColorFilter.mode(
-                                      const Color(
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "POWERED BY navIKaraNa",
+                                    style: TextStyle(
+                                      color: const Color(
                                         0xFF6A8A73,
-                                      ).withValues(alpha: 0.1),
-                                      BlendMode.srcATop,
-                                    ),
-                                    child: Image.asset(
-                                      'assets/navikarnaNew.png',
-                                      width: 90,
-                                      fit: BoxFit.contain,
+                                      ).withValues(alpha: 0.8),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.5,
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  "POWERED BY navIKaraNa",
-                                  style: TextStyle(
-                                    color: const Color(
-                                      0xFF6A8A73,
-                                    ).withValues(alpha: 0.8),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),

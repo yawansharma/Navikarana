@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
@@ -45,7 +45,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _fetchClasses() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: 'main_db',
+        databaseId: '69ecebfb0033cf785741',
         collectionId: 'classes',
         queries: [Query.contains('studentIds', widget.username)],
       );
@@ -93,7 +93,7 @@ class _HomePageState extends State<HomePage> {
 
               try {
                 final classQuery = await AppwriteService.databases.listDocuments(
-                  databaseId: 'main_db',
+                  databaseId: '69ecebfb0033cf785741',
                   collectionId: 'classes',
                   queries: [Query.equal('classCode', code)],
                 );
@@ -115,7 +115,7 @@ class _HomePageState extends State<HomePage> {
                 }
 
                 await AppwriteService.databases.updateDocument(
-                  databaseId: 'main_db',
+                  databaseId: '69ecebfb0033cf785741',
                   collectionId: 'classes',
                   documentId: classDoc.$id,
                   data: {'studentIds': currentStudents},
@@ -410,7 +410,7 @@ class _HomePageState extends State<HomePage> {
 }
 
 // =============================================================================
-// _ActivePeriodsBanner — shows active/upcoming sessions for all joined classes
+// _ActivePeriodsBanner â€” shows active/upcoming sessions for all joined classes
 // =============================================================================
 class _ActivePeriodsBanner extends StatefulWidget {
   final List<models.Document> classDocs;
@@ -463,7 +463,7 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
 
       try {
         final result = await AppwriteService.databases.listDocuments(
-          databaseId: 'main_db',
+          databaseId: '69ecebfb0033cf785741',
           collectionId: 'periods',
           queries: [
             Query.equal('classId', classId),

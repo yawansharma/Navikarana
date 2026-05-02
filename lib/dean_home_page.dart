@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +7,7 @@ import 'dean_login.dart';
 import 'admin_home_page.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
+import 'leave_management_page.dart';
 
 // ---------------------------------------------------------------------------
 // THEME CONSTANTS FOR DEAN
@@ -121,8 +122,8 @@ class _DeanHomePageState extends State<DeanHomePage> {
                       ),
                       child: SafeArea(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.only(
+                              left: 16, right: 16, top: 8, bottom: 16),
                           child: Row(
                             mainAxisAlignment:
                                 MainAxisAlignment.spaceAround,
@@ -429,6 +430,7 @@ class _AdminListTabState extends State<_AdminListTab> {
     final nameCtrl = TextEditingController();
     final passCtrl = TextEditingController();
     String selectedDept = departments.first;
+    int selectedLevel = 1;
     bool saving = false;
 
     showModalBottomSheet(
@@ -444,10 +446,11 @@ class _AdminListTabState extends State<_AdminListTab> {
               left: 24,
               right: 24,
               top: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Text("Onboard New Admin",
                   style: GoogleFonts.poppins(
                       fontSize: 20, fontWeight: FontWeight.bold)),
@@ -492,6 +495,21 @@ class _AdminListTabState extends State<_AdminListTab> {
                     .toList(),
                 onChanged: (v) =>
                     setSheetState(() => selectedDept = v!),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: selectedLevel,
+                decoration: InputDecoration(
+                    labelText: 'Admin Level',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12))),
+                items: const [
+                  DropdownMenuItem(value: 1, child: Text("Level 1")),
+                  DropdownMenuItem(value: 2, child: Text("Level 2")),
+                  DropdownMenuItem(value: 3, child: Text("Level 3")),
+                ],
+                onChanged: (v) =>
+                    setSheetState(() => selectedLevel = v!),
               ),
               const SizedBox(height: 30),
               SizedBox(
@@ -540,6 +558,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                                 'role': 'admin',
                                 'status': 'active',
                                 'department': selectedDept,
+                                'level': selectedLevel,
                                 'managedClasses': [],
                                 'createdAt':
                                     DateTime.now().toIso8601String(),
@@ -578,8 +597,9 @@ class _AdminListTabState extends State<_AdminListTab> {
                               fontSize: 15)),
                 ),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 40),
             ],
+          ),
           ),
         ),
       ),
@@ -671,6 +691,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                                 '',
                             adminId: data['username'] as String? ?? '',
                             isDean: true,
+                            adminLevel: 1, // Dean always gets Level 1
                           ),
                         ));
                   },

@@ -1,4 +1,4 @@
-﻿import 'dart:async'; // Required for Splash Screen Timer
+import 'dart:async'; // Required for Splash Screen Timer
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'register_page.dart';
@@ -117,7 +117,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ],
               ),
               child: Image.asset(
-                'assets/navikarnaNew.png',
+                'assets/upasthiti.png',
                 width: 250,
                 fit: BoxFit.contain,
               ),
@@ -471,7 +471,7 @@ final data = response.documents.first.data;
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    "POWERED BY navIKaraNa",
+                                    "POWERED BY upasthiti",
                                     style: TextStyle(
                                       color: const Color(
                                         0xFF6A8A73,

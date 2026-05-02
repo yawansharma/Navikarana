@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'main.dart'; // Import main to navigate back
 import 'dean_home_page.dart';
 import 'app_theme.dart';
@@ -116,7 +116,7 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    "Navikarana Executive",
+                    "upasthiti executive",
                     style: TextStyle(
                       color: goldAccent,
                       fontWeight: FontWeight.bold,

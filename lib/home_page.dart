@@ -323,20 +323,32 @@ class _HomePageState extends State<HomePage> {
                                         CrossAxisAlignment.start,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text(
-                                        data['className'] ?? "Unknown Class",
-                                        style: GoogleFonts.poppins(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              data['className'] ?? "Unknown Class",
+                                              style: GoogleFonts.poppins(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      Text(
-                                        "Code: ${data['classCode'] ?? 'Unknown'}",
-                                        style: AppTheme.labelSmall
-                                            .copyWith(fontSize: 11),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              "Code: ${data['classCode'] ?? 'Unknown'}",
+                                              style: AppTheme.labelSmall
+                                                  .copyWith(fontSize: 11),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),

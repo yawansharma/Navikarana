@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
@@ -438,7 +438,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                "POWERED BY NAVIKARANA",
+                                "POWERED BY upasthiti",
                                 style: TextStyle(
                                   color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
                                   fontSize: 10,

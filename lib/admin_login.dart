@@ -1,4 +1,4 @@
-﻿import 'dart:math'; // For Random Captcha
+import 'dart:math'; // For Random Captcha
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
@@ -154,8 +154,13 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       Navigator.of(context).pop();
 
       final adminName = data['name'] ?? adminId;
+      final adminLevel = data['level'] is int ? data['level'] as int : 1;
       Navigator.pushReplacement(context, MaterialPageRoute(
-          builder: (_) => AdminHomePage(adminName: adminName, adminId: adminId),
+          builder: (_) => AdminHomePage(
+              adminName: adminName,
+              adminId: adminId,
+              adminLevel: adminLevel,
+          ),
       ));
     } catch (e) {
       _dismissAndShowError("An unexpected error occurred: $e");
@@ -190,7 +195,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    "Navikarana",
+                    "upasthiti",
                     style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -419,7 +424,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    "POWERED BY NAVIKARANA",
+                                    "POWERED BY upasthiti",
                                     style: TextStyle(
                                       color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
                                       fontSize: 10,

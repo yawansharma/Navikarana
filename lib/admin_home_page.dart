@@ -15,6 +15,7 @@ import 'community_page.dart';
 import 'app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/appwrite_service.dart';
+import 'leave_management_page.dart';
 
 // =============================================================================
 // AdminHomePage â€” 3-tab shell: Classes | Analytics | Settings
@@ -23,11 +24,13 @@ class AdminHomePage extends StatefulWidget {
   final String adminName;
   final String adminId;
   final bool isDean;
+  final int adminLevel;
   const AdminHomePage(
       {super.key,
       required this.adminName,
       required this.adminId,
-      this.isDean = false});
+      this.isDean = false,
+      this.adminLevel = 1});
 
   @override
   State<AdminHomePage> createState() => _AdminHomePageState();
@@ -105,7 +108,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         queries: [
           Query.equal('adminId', widget.adminId),
           Query.orderDesc('timestamp'),
-          Query.limit(500),
+          Query.limit(5000),
         ],
       );
       if (mounted) {
@@ -207,7 +210,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           ),
                         ],
                       ),
-                      child: BottomNavigationBar(
+                      child: SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: BottomNavigationBar(
                         currentIndex: _currentIndex,
                         onTap: (i) => setState(() {
                           _prevIndex = _currentIndex;
@@ -238,6 +244,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         ],
                       ),
                     ),
+                  ),
+                ),
                   ],
                 ),
               ),
@@ -370,6 +378,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             classId: classDoc.$id,
                             classData: data,
                             adminName: widget.adminName,
+                            adminLevel: widget.adminLevel,
                           ),
                           transitionsBuilder: (context, animation,
                               secondaryAnimation, child) {
@@ -483,18 +492,19 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   );
                 },
               ),
-        Positioned(
-          bottom: 20,
-          right: 20,
-          child: FloatingActionButton.extended(
-            backgroundColor: const Color(0xFF6A8A73),
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.add),
-            label: const Text("New Class",
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            onPressed: () => _openCreateClassDialog(context),
+        if (widget.adminLevel < 2)
+          Positioned(
+            bottom: 20,
+            right: 20,
+            child: FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF6A8A73),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text("New Class",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () => _openCreateClassDialog(context),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -939,7 +949,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     _selectedLogIds.clear();
                   }),
                 ),
-              ] else ...[
+              ] else if (widget.adminLevel < 2) ...[
                 IconButton(
                   icon: const Icon(Icons.checklist_rounded,
                       color: Color(0xFF6A8A73)),
@@ -1382,7 +1392,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       databaseId: '69ecebfb0033cf785741',
       collectionId: 'attendance_logs',
       queries: [
-        Query.equal('adminId', widget.adminId),
+        Query.equal('createdBy', widget.adminId),
         Query.orderDesc('timestamp'),
         Query.limit(5000),
       ],
@@ -1457,6 +1467,20 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   color: Colors.grey.shade500, fontSize: 13)),
         ),
         const SizedBox(height: 32),
+        _moreItem(Icons.event_note_rounded, "Leave Management",
+            const Color(0xFF6A8A73), () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => LeaveManagementPage(
+                userId: widget.adminId,
+                userName: widget.adminName,
+                userLevel: widget.adminLevel,
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 8),
         _moreItem(Icons.logout_rounded, "Logout", Colors.red, () {
           Navigator.pushAndRemoveUntil(
             context,
@@ -1524,12 +1548,14 @@ class ClassManagementPage extends StatefulWidget {
   final String classId;
   final Map<String, dynamic> classData;
   final String adminName;
+  final int adminLevel;
 
   const ClassManagementPage({
     super.key,
     required this.classId,
     required this.classData,
     required this.adminName,
+    required this.adminLevel,
   });
 
   @override
@@ -1663,6 +1689,98 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                             ),
                           ]),
                         ],
+                      ),
+                      Positioned(
+                        top: 12,
+                        left: 0,
+                        right: 0,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              ActionChip(
+                                backgroundColor: const Color(0xFF6A8A73),
+                                side: BorderSide.none,
+                                elevation: 3,
+                                shadowColor: Colors.black45,
+                                avatar: const Icon(Icons.my_location,
+                                    size: 14, color: Colors.white),
+                                label: const Text("My Location",
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white)),
+                                onPressed: () async {
+                                  try {
+                                    final loc = await Geolocator
+                                        .getCurrentPosition();
+                                    final target =
+                                        LatLng(loc.latitude, loc.longitude);
+                                    setSt(() => current = target);
+                                    mapController.move(target, 17);
+                                  } catch (_) {}
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              ...[
+                                {'name': 'SoC', 'lat': 10.7166, 'lng': 79.0222},
+                                {
+                                  'name': 'SEEE',
+                                  'lat': 10.7181,
+                                  'lng': 79.0232
+                                },
+                                {
+                                  'name': 'SoME',
+                                  'lat': 10.7171,
+                                  'lng': 79.0211
+                                },
+                                {
+                                  'name': 'SoCE',
+                                  'lat': 10.7160,
+                                  'lng': 79.0240
+                                },
+                                {
+                                  'name': 'Library',
+                                  'lat': 10.7190,
+                                  'lng': 79.0240
+                                },
+                                {
+                                  'name': 'Main Gate',
+                                  'lat': 10.7155,
+                                  'lng': 79.0205
+                                },
+                                {
+                                  'name': 'Auditorium',
+                                  'lat': 10.7160,
+                                  'lng': 79.0220
+                                },
+                              ].map((p) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: ActionChip(
+                                      backgroundColor: Colors.white
+                                          .withValues(alpha: 0.95),
+                                      side: BorderSide.none,
+                                      elevation: 2,
+                                      shadowColor: Colors.black26,
+                                      avatar: const Icon(Icons.place_outlined,
+                                          size: 14, color: Color(0xFF6A8A73)),
+                                      label: Text(p['name'] as String,
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.black87)),
+                                      onPressed: () {
+                                        final target = LatLng(p['lat'] as double,
+                                            p['lng'] as double);
+                                        setSt(() => current = target);
+                                        mapController.move(target, 17);
+                                      },
+                                    ),
+                                  )),
+                            ],
+                          ),
+                        ),
                       ),
                       Positioned(
                         bottom: 0,
@@ -1927,18 +2045,30 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_className,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 17)),
-                Text("Code: $_classCode",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 11, color: Colors.white60)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(_className,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 17)),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text("Code: $_classCode",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.white60)),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1966,18 +2096,20 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.download_rounded,
-                color: Colors.white),
-            tooltip: "Export CSV",
-            onPressed: _exportClassCSV,
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline,
-                color: Colors.redAccent),
-            tooltip: "Delete Class",
-            onPressed: _deleteClass,
-          ),
+          if (widget.adminLevel < 2) ...[
+            IconButton(
+              icon: const Icon(Icons.download_rounded,
+                  color: Colors.white),
+              tooltip: "Export CSV",
+              onPressed: _exportClassCSV,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  color: Colors.redAccent),
+              tooltip: "Delete Class",
+              onPressed: _deleteClass,
+            ),
+          ],
         ],
       ),
       body: Column(
@@ -2186,6 +2318,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                       classId: widget.classId,
                       adminName: widget.adminName,
                       studentIds: studentIds.cast<String>(),
+                      adminLevel: widget.adminLevel,
                     ),
                   ],
                 ),
@@ -2259,11 +2392,13 @@ class _PeriodsManagementSection extends StatefulWidget {
   final String classId;
   final String adminName;
   final List<String> studentIds;
+  final int adminLevel;
 
   const _PeriodsManagementSection({
     required this.classId,
     required this.adminName,
     required this.studentIds,
+    required this.adminLevel,
   });
 
   @override
@@ -2465,20 +2600,21 @@ class _PeriodsManagementSectionState
                   style: TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 15)),
               const Spacer(),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text("Add"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6A8A73),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(0, 36),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
+              if (widget.adminLevel < 3)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text("Add"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6A8A73),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 36),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => _openAddPeriodDialog(context),
                 ),
-                onPressed: () => _openAddPeriodDialog(context),
-              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -2563,14 +2699,15 @@ class _PeriodsManagementSectionState
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                IconButton(
-                                  icon: const Icon(
-                                      Icons.delete_outline,
-                                      color: Colors.redAccent,
-                                      size: 20),
-                                  onPressed: () =>
-                                      _deletePeriod(doc.$id),
-                                ),
+                                if (widget.adminLevel < 3)
+                                  IconButton(
+                                    icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                        size: 20),
+                                    onPressed: () =>
+                                        _deletePeriod(doc.$id),
+                                  ),
                                 const Icon(Icons.chevron_right,
                                     color: Colors.grey),
                               ],

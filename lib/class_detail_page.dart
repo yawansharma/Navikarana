@@ -1,15 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+// Appwrite imports
+import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/models.dart' as models;
+
 import 'community_page.dart';
 import 'app_theme.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'services/appwrite_service.dart';
 
 class ClassDetailPage extends StatefulWidget {
   final String classId;
@@ -89,17 +93,26 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
   }
 
   // -------------------------------------------------------------------------
-  // Upload photo to Firebase Storage
+  // Upload photo to Appwrite Storage
   // -------------------------------------------------------------------------
   Future<String?> _uploadPhoto(File photo) async {
     try {
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('attendance_photos')
-          .child(widget.classId)
-          .child('${widget.username}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await ref.putFile(photo);
-      return await ref.getDownloadURL();
+      final fileId = ID.unique();
+      final file = await AppwriteService.storage.createFile(
+        bucketId: 'attendance_photos',
+        fileId: fileId,
+        file: InputFile.fromPath(
+          path: photo.path,
+          filename: '${widget.username}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+      );
+      
+      // Construct the view URL (Update Endpoint and Project ID here to match your Appwrite setup)
+      // Make sure the bucket permissions allow read access for users to view these URLs
+      const String endpoint = "https://YOUR_APPWRITE_ENDPOINT/v1"; 
+      const String projectId = "YOUR_PROJECT_ID";
+      
+      return "$endpoint/storage/buckets/attendance_photos/files/${file.$id}/view?project=$projectId";
     } catch (_) {
       return null;
     }
@@ -108,20 +121,20 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
   // -------------------------------------------------------------------------
   // Get Active Period
   // -------------------------------------------------------------------------
-  Map<String, dynamic>? _getActivePeriod(List<QueryDocumentSnapshot> periodDocs) {
+  Map<String, dynamic>? _getActivePeriod(List<models.Document> periodDocs) {
     final now = DateTime.now();
     for (var doc in periodDocs) {
-      final data = doc.data() as Map<String, dynamic>;
+      final data = doc.data;
       if (data['startTime'] == null || data['endTime'] == null) continue;
       
-      final realStart = (data['startTime'] as Timestamp).toDate();
-      final realEnd = (data['endTime'] as Timestamp).toDate();
+      final realStart = DateTime.parse(data['startTime']);
+      final realEnd = DateTime.parse(data['endTime']);
       
       final start = realStart.subtract(const Duration(minutes: 10));
       final end = realEnd.add(const Duration(minutes: 10));
       
       if (now.isAfter(start) && now.isBefore(end)) {
-        return {'id': doc.id, ...data};
+        return {'id': doc.$id, ...data};
       }
     }
     return null;
@@ -218,8 +231,8 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
 
       statusNotifier.value = "Saving record...";
       final now = DateTime.now();
-      final realStart = (activePeriod['startTime'] as Timestamp).toDate();
-      final realEnd = (activePeriod['endTime'] as Timestamp).toDate();
+      final realStart = DateTime.parse(activePeriod['startTime']);
+      final realEnd = DateTime.parse(activePeriod['endTime']);
 
       String entryStatus = "Within Window";
       if (now.isBefore(realStart)) {
@@ -228,31 +241,43 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         entryStatus = "Late Window";
       }
 
-      final classDoc = await FirebaseFirestore.instance.collection('classes').doc(widget.classId).get();
-      final adminId = classDoc.data()?['createdBy'] ?? classDoc.data()?['adminId'] ?? '';
+      final classDoc = await AppwriteService.databases.getDocument(
+        databaseId: 'main_db',
+        collectionId: 'classes',
+        documentId: widget.classId,
+      );
+      final adminId = classDoc.data['createdBy'] ?? classDoc.data['adminId'] ?? '';
 
-      await FirebaseFirestore.instance.collection('attendance_logs').add({
-        'userId': widget.username,
-        'classId': widget.classId,
-        'adminId': adminId,
-        'periodId': activePeriod['id'],
-        'className': widget.className,
-        'timestamp': FieldValue.serverTimestamp(),
-        'photoUrl': photoUrl ?? '',
-        'isWithinGeofence': isWithinGeofence,
-        'isVerified': false,
-        'adminVerifiedStatus': isWithinGeofence ? 'Present' : 'Pending',
-        'entryStatus': entryStatus,
-        'verifiedBy': '',
-      });
+      await AppwriteService.databases.createDocument(
+        databaseId: 'main_db',
+        collectionId: 'attendance_logs',
+        documentId: ID.unique(),
+        data: {
+          'userId': widget.username,
+          'classId': widget.classId,
+          'adminId': adminId,
+          'periodId': activePeriod['id'],
+          'className': widget.className,
+          'timestamp': DateTime.now().toIso8601String(),
+          'photoUrl': photoUrl ?? '',
+          'isWithinGeofence': isWithinGeofence,
+          'isVerified': false,
+          'adminVerifiedStatus': isWithinGeofence ? 'Present' : 'Pending',
+          'entryStatus': entryStatus,
+          'verifiedBy': '',
+        }
+      );
 
-      if (mounted) Navigator.of(context).pop();
-      _showSuccessTicket(isWithinGeofence, entryStatus, activePeriod);
+      if (mounted) {
+        Navigator.of(context).pop();
+        setState(() {}); // Refresh the FutureBuilders
+        _showSuccessTicket(isWithinGeofence, entryStatus, activePeriod);
+      }
     } catch (e) {
       if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
       _showSnackBar("Something went wrong: $e");
     } finally {
-      setState(() => _isReporting = false);
+      if (mounted) setState(() => _isReporting = false);
     }
   }
 
@@ -445,24 +470,35 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       ),
       body: Column(
         children: [
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('attendance_logs').where('userId', isEqualTo: widget.username).where('classId', isEqualTo: widget.classId).snapshots(),
+          FutureBuilder<models.DocumentList>(
+            future: AppwriteService.databases.listDocuments(
+              databaseId: 'main_db',
+              collectionId: 'attendance_logs',
+              queries: [
+                Query.equal('userId', widget.username),
+                Query.equal('classId', widget.classId),
+              ]
+            ),
             builder: (context, snapshot) {
               String statusLabel = "Not Reported Today";
               Color statusColor = Colors.grey.shade500;
               IconData statusIcon = Icons.radio_button_unchecked;
 
-              if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                final todayDocs = snapshot.data!.docs.where((doc) {
-                  final ts = (doc.data() as Map)['timestamp'] as Timestamp?;
+              if (snapshot.hasData && snapshot.data!.documents.isNotEmpty) {
+                final todayDocs = snapshot.data!.documents.where((doc) {
+                  final ts = doc.data['timestamp'] as String?;
                   if (ts == null) return false;
-                  final d = ts.toDate();
+                  final d = DateTime.parse(ts);
                   return d.isAfter(startOfDay) && d.isBefore(endOfDay);
                 }).toList();
                 
                 if (todayDocs.isNotEmpty) {
-                  todayDocs.sort((a, b) => ((b.data() as Map)['timestamp'] as Timestamp).compareTo((a.data() as Map)['timestamp'] as Timestamp));
-                  final log = todayDocs.first.data() as Map<String, dynamic>;
+                  todayDocs.sort((a, b) {
+                    final tsA = DateTime.parse(a.data['timestamp']);
+                    final tsB = DateTime.parse(b.data['timestamp']);
+                    return tsB.compareTo(tsA);
+                  });
+                  final log = todayDocs.first.data;
                   final adminStatus = log['adminVerifiedStatus'] as String? ?? 'Pending';
                   
                   if (adminStatus == 'Present') {
@@ -522,33 +558,49 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                   Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(top: 16, bottom: 8), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
                   const Padding(padding: EdgeInsets.fromLTRB(24, 8, 24, 12), child: Text("Attendance History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
                   Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('classes').doc(widget.classId).collection('periods').orderBy('startTime', descending: true).snapshots(),
+                    child: FutureBuilder<models.DocumentList>(
+                      future: AppwriteService.databases.listDocuments(
+                        databaseId: 'main_db',
+                        collectionId: 'periods',
+                        queries: [
+                          Query.equal('classId', widget.classId),
+                          Query.orderDesc('startTime')
+                        ]
+                      ),
                       builder: (context, periodSnap) {
                         if (!periodSnap.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
-                        final periods = periodSnap.data!.docs;
+                        final periods = periodSnap.data!.documents;
                         
                         if (periods.isEmpty) return const Center(child: Text("No periods scheduled yet.", style: TextStyle(color: Colors.grey)));
 
-                        return StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('attendance_logs').where('userId', isEqualTo: widget.username).where('classId', isEqualTo: widget.classId).snapshots(),
+                        return FutureBuilder<models.DocumentList>(
+                          future: AppwriteService.databases.listDocuments(
+                            databaseId: 'main_db',
+                            collectionId: 'attendance_logs',
+                            queries: [
+                              Query.equal('userId', widget.username),
+                              Query.equal('classId', widget.classId)
+                            ]
+                          ),
                           builder: (context, logSnap) {
                             if (!logSnap.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
                             
                             // Map logs by periodId — keep most recent if duplicates exist
                             Map<String, Map<String, dynamic>> logMap = {};
-                            for (var log in logSnap.data!.docs) {
-                              final data = log.data() as Map<String, dynamic>;
+                            for (var log in logSnap.data!.documents) {
+                              final data = log.data;
                               final pId = data['periodId'] as String?;
                               if (pId == null) continue;
                               final existing = logMap[pId];
                               if (existing == null) {
                                 logMap[pId] = data;
                               } else {
-                                final existingTs = existing['timestamp'] as Timestamp?;
-                                final newTs = data['timestamp'] as Timestamp?;
-                                if (newTs != null && (existingTs == null || newTs.compareTo(existingTs) > 0)) {
-                                  logMap[pId] = data;
+                                final existingTsStr = existing['timestamp'] as String?;
+                                final newTsStr = data['timestamp'] as String?;
+                                if (newTsStr != null) {
+                                  if (existingTsStr == null || DateTime.parse(newTsStr).compareTo(DateTime.parse(existingTsStr)) > 0) {
+                                    logMap[pId] = data;
+                                  }
                                 }
                               }
                             }
@@ -558,13 +610,13 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                               itemCount: periods.length,
                               itemBuilder: (context, index) {
                                 final period = periods[index];
-                                final pData = period.data() as Map<String, dynamic>;
-                                final logData = logMap[period.id];
+                                final pData = period.data;
+                                final logData = logMap[period.$id];
 
-                                final startTs = pData['startTime'] as Timestamp?;
-                                final endTs = pData['endTime'] as Timestamp?;
+                                final startTs = pData['startTime'] != null ? DateTime.parse(pData['startTime']) : null;
+                                final endTs = pData['endTime'] != null ? DateTime.parse(pData['endTime']) : null;
                                 final String timeStr = (startTs != null && endTs != null) 
-                                    ? "${DateFormat('hh:mm a').format(startTs.toDate())} - ${DateFormat('hh:mm a').format(endTs.toDate())}"
+                                    ? "${DateFormat('hh:mm a').format(startTs)} - ${DateFormat('hh:mm a').format(endTs)}"
                                     : "Unknown Time";
                                 final String dateStr = pData['date'] ?? "";
                                 
@@ -579,10 +631,10 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                                    isWithinGeofence = logData['isWithinGeofence'] == true;
                                    photoUrl = logData['photoUrl'] as String? ?? '';
                                 } else {
-                                   final realStart = startTs?.toDate();
+                                   final realStart = startTs;
                                    if (realStart != null && DateTime.now().isBefore(realStart.subtract(const Duration(minutes: 10)))) {
                                        adminStatus = "Upcoming";
-                                   } else if (endTs != null && DateTime.now().isAfter(endTs.toDate().add(const Duration(minutes: 10)))) {
+                                   } else if (endTs != null && DateTime.now().isAfter(endTs.add(const Duration(minutes: 10)))) {
                                        adminStatus = "Missing";
                                    } else {
                                        adminStatus = "Pending Action";
@@ -650,16 +702,29 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
           ),
         ],
       ),
-      floatingActionButton: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('classes').doc(widget.classId).collection('periods').snapshots(),
+      floatingActionButton: FutureBuilder<models.DocumentList>(
+        future: AppwriteService.databases.listDocuments(
+          databaseId: 'main_db',
+          collectionId: 'periods',
+          queries: [Query.equal('classId', widget.classId)]
+        ),
         builder: (context, periodSnap) {
           if (!periodSnap.hasData) return const SizedBox.shrink();
-          final activePeriod = _getActivePeriod(periodSnap.data!.docs);
+          final activePeriod = _getActivePeriod(periodSnap.data!.documents);
+          
           if (activePeriod == null) return SizedBox(width: MediaQuery.of(context).size.width - 40, height: 56, child: ElevatedButton.icon(onPressed: null, icon: const Icon(Icons.block), label: const Text("No Active Session", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey, foregroundColor: Colors.white, disabledBackgroundColor: Colors.grey.shade300, disabledForegroundColor: Colors.grey.shade500, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0)));
-          return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('attendance_logs').where('userId', isEqualTo: widget.username).where('periodId', isEqualTo: activePeriod['id']).snapshots(),
+          
+          return FutureBuilder<models.DocumentList>(
+            future: AppwriteService.databases.listDocuments(
+              databaseId: 'main_db',
+              collectionId: 'attendance_logs',
+              queries: [
+                Query.equal('userId', widget.username),
+                Query.equal('periodId', activePeriod['id'])
+              ]
+            ),
             builder: (context, logSnap) {
-              final bool alreadyReported = logSnap.hasData && logSnap.data!.docs.isNotEmpty;
+              final bool alreadyReported = logSnap.hasData && logSnap.data!.documents.isNotEmpty;
               return SizedBox(width: MediaQuery.of(context).size.width - 40, height: 56, child: ElevatedButton.icon(onPressed: alreadyReported || _isReporting ? null : () => _reportAttendance(activePeriod), icon: Icon(alreadyReported ? Icons.check_circle : Icons.camera_alt), label: Text(alreadyReported ? "Reported for this Period" : "Report Attendance", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6A8A73), foregroundColor: Colors.white, disabledBackgroundColor: Colors.grey.shade300, disabledForegroundColor: Colors.grey.shade500, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 4)));
             },
           );

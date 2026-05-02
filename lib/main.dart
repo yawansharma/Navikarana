@@ -12,7 +12,6 @@ import 'app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -295,7 +294,7 @@ class _LoginPageState extends State<LoginPage> {
                   GestureDetector(
                     onTap: _handleSecretTap,
                     child: const Text(
-                      "Navikarana",
+                      "upasthiti",
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -466,7 +465,7 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  "POWERED BY NAVIKARANA",
+                                  "POWERED BY navIKaraNa",
                                   style: TextStyle(
                                     color: const Color(
                                       0xFF6A8A73,

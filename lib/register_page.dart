@@ -4,11 +4,12 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'home_page.dart';
 import 'app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:appwrite/appwrite.dart';
+import '../services/appwrite_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -165,17 +166,21 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  Future<void> _registerUserInFirestore() async {
-    await FirebaseFirestore.instance.collection('users').doc(uniqueCodeController.text.trim()).set({
+  Future<void> _registerUserInAppwrite() async {
+  await AppwriteService.databases.createDocument(
+    databaseId: 'main_db',
+    collectionId: 'users',
+    documentId: ID.unique(),
+    data: {
       'name': nameController.text.trim(),
       'username': uniqueCodeController.text.trim(),
       'password': passwordController.text.trim(),
       'department': _selectedSchool,
       'latitude': latitude,
       'longitude': longitude,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
+    },
+  );
+}
 
   Future<void> _onRegisterPressed() async {
     if (_localPhoto == null) { _showSnackBar("Please add a photo first."); return; }
@@ -183,8 +188,14 @@ class _RegisterPageState extends State<RegisterPage> {
     if (passwordController.text != confirmPasswordController.text) { _showSnackBar("Passwords do not match."); return; }
     if (_selectedSchool == null) { _showSnackBar("Please select your school."); return; }
 
-    final existingUser = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: uniqueCodeController.text.trim()).get();
-    if (existingUser.docs.isNotEmpty) { _showSnackBar("Unique ID already exists."); return; }
+    final existingUser = await AppwriteService.databases.listDocuments(
+  databaseId: 'main_db',
+  collectionId: 'users',
+  queries: [
+    Query.equal('username', uniqueCodeController.text.trim()),
+  ],
+);
+    if (existingUser.documents.isNotEmpty) { _showSnackBar("Unique ID already exists."); return; }
 
     setState(() => _registeringFace = true);
     final faceError = await _registerFaceOnBackend();
@@ -193,7 +204,7 @@ class _RegisterPageState extends State<RegisterPage> {
       _showSnackBar(faceError);
       return;
     }
-    await _registerUserInFirestore();
+    await _registerUserInAppwrite();
     setState(() => _registeringFace = false);
     if (!mounted) return;
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(name: nameController.text.trim(), username: uniqueCodeController.text.trim())));

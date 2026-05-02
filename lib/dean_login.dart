@@ -22,7 +22,7 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
     super.dispose();
   }
 
-  // 🔐 DEAN LOGIN LOGIC (Hardcoded for maximum security as requested)
+  // ðŸ” DEAN LOGIN LOGIC (Hardcoded for maximum security as requested)
   Future<void> _login() async {
     final deanId = usernameController.text.trim();
     final password = passwordController.text.trim();
@@ -116,11 +116,7 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-<<<<<<< Updated upstream
-                    "Navikarana Executive",
-=======
                     "upasthiti Executive",
->>>>>>> Stashed changes
                     style: TextStyle(
                       color: goldAccent,
                       fontWeight: FontWeight.bold,

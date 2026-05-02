@@ -1,4 +1,4 @@
-name: unknown
+name: upasthiti
 description: "A new Flutter project."
 publish_to: 'none'
 version: 0.1.0
@@ -13,10 +13,6 @@ dependencies:
   location: ^8.0.1
   file_picker: ^10.3.8
   http: ^1.6.0
-  firebase_core: ^3.15.2
-  cloud_firestore: ^5.6.12
-  firebase_auth: ^5.3.4
-  firebase_storage: ^12.4.10
   geolocator: ^10.1.0
   camera: ^0.11.3
   path_provider: ^2.1.5
@@ -32,6 +28,7 @@ dependencies:
   permission_handler: ^12.0.1
   intl: ^0.19.0
   google_fonts: ^6.2.1
+  appwrite: ^23.1.0
 
 
 dev_dependencies:
@@ -43,9 +40,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-<<<<<<< Updated upstream
-    - assets/navikarnaNew.png
-=======
     - assets/upasthiti.png
 
 flutter_launcher_icons:
@@ -56,4 +50,3 @@ flutter_launcher_icons:
     image_path: "assets/appLogo.png"
     icon_size: 48
   image_path: "assets/appLogo.png"
->>>>>>> Stashed changes

@@ -1,17 +1,22 @@
-import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/models.dart' as models;
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-
+import 'services/appwrite_service.dart';
 
 // =============================================================================
-// CommunityPage — entry point, two tabs: Channel + Direct Messages
+// CommunityPage â€” two tabs: Channel + Direct Messages
+//
+// Appwrite collection: community_messages
+//   Fields: classId (string), channel (string), senderId (string),
+//           text (string), fileUrl (string), fileType (string),
+//           fileName (string), timestamp (string ISO-8601), isAdmin (bool)
+//
+// Storage bucket: community_files
 // =============================================================================
 class CommunityPage extends StatelessWidget {
   final String classId;
@@ -45,8 +50,14 @@ class CommunityPage extends StatelessWidget {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Community", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-              Text(className, style: GoogleFonts.poppins(fontSize: 11, color: Colors.white60)),
+              Text("Community",
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.white)),
+              Text(className,
+                  style: GoogleFonts.poppins(
+                      fontSize: 11, color: Colors.white60)),
             ],
           ),
           bottom: TabBar(
@@ -54,8 +65,10 @@ class CommunityPage extends StatelessWidget {
             indicatorWeight: 3,
             labelColor: AppTheme.kGreen,
             unselectedLabelColor: Colors.grey.shade500,
-            labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13),
-            unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 13),
+            labelStyle: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold, fontSize: 13),
+            unselectedLabelStyle: GoogleFonts.poppins(
+                fontWeight: FontWeight.w500, fontSize: 13),
             tabs: const [
               Tab(text: "CHANNEL"),
               Tab(text: "DIRECT MESSAGES"),
@@ -65,18 +78,15 @@ class CommunityPage extends StatelessWidget {
         body: RisingSheet(
           child: TabBarView(
             children: [
-              // ── Tab 0: Public class channel ──────────────────────────────────
+              // â”€â”€ Tab 0: Public class channel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               _ChatView(
-                messagesRef: FirebaseFirestore.instance
-                    .collection('community')
-                    .doc(classId)
-                    .collection('channel_messages'),
                 classId: classId,
+                channel: 'channel',
                 username: username,
                 isAdmin: isAdmin,
                 showSenderName: true,
               ),
-              // ── Tab 1: Direct Messages ───────────────────────────────────────
+              // â”€â”€ Tab 1: Direct Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               isAdmin
                   ? _AdminDmListTab(
                       classId: classId,
@@ -84,11 +94,8 @@ class CommunityPage extends StatelessWidget {
                       studentIds: studentIds,
                     )
                   : _ChatView(
-                      messagesRef: FirebaseFirestore.instance
-                          .collection('community')
-                          .doc(classId)
-                          .collection('dm_$username'),
                       classId: classId,
+                      channel: 'dm_$username',
                       username: username,
                       isAdmin: false,
                       showSenderName: false,
@@ -102,18 +109,18 @@ class CommunityPage extends StatelessWidget {
 }
 
 // =============================================================================
-// Generic chat view — reused for channel and student DM tab
+// Generic chat view â€” reused for channel and student DM
 // =============================================================================
 class _ChatView extends StatefulWidget {
-  final CollectionReference messagesRef;
   final String classId;
+  final String channel;
   final String username;
   final bool isAdmin;
   final bool showSenderName;
 
   const _ChatView({
-    required this.messagesRef,
     required this.classId,
+    required this.channel,
     required this.username,
     required this.isAdmin,
     required this.showSenderName,
@@ -126,13 +133,58 @@ class _ChatView extends StatefulWidget {
 class _ChatViewState extends State<_ChatView> {
   final _ctrl = TextEditingController();
   final _scroll = ScrollController();
+  List<Map<String, dynamic>> _messages = [];
   bool _sending = false;
+  bool _loading = true;
+  RealtimeSubscription? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMessages();
+    _sub = AppwriteService.realtime.subscribe(
+        ['databases.main_db.collections.community_messages.documents']);
+    _sub!.stream.listen((event) {
+      final payload = event.payload;
+      if (payload['classId'] == widget.classId &&
+          payload['channel'] == widget.channel) {
+        if (mounted) _fetchMessages();
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _sub?.close();
     _ctrl.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchMessages() async {
+    try {
+      final result = await AppwriteService.databases.listDocuments(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'community_messages',
+        queries: [
+          Query.equal('classId', widget.classId),
+          Query.equal('channel', widget.channel),
+          Query.orderAsc('timestamp'),
+          Query.limit(200),
+        ],
+      );
+      if (mounted) {
+        setState(() {
+          _messages = result.documents
+              .map((d) => {'_id': d.$id, ...d.data})
+              .toList();
+          _loading = false;
+        });
+        _scrollToBottom();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _scrollToBottom() {
@@ -150,17 +202,31 @@ class _ChatViewState extends State<_ChatView> {
     if (text.isEmpty) return;
     _ctrl.clear();
     setState(() => _sending = true);
-    await widget.messagesRef.add({
-      'senderId': widget.username,
-      'text': text,
-      'fileUrl': '',
-      'fileType': '',
-      'fileName': '',
-      'timestamp': FieldValue.serverTimestamp(),
-      'isAdmin': widget.isAdmin,
-    });
-    setState(() => _sending = false);
-    _scrollToBottom();
+    try {
+      await AppwriteService.databases.createDocument(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'community_messages',
+        documentId: ID.unique(),
+        data: {
+          'classId': widget.classId,
+          'channel': widget.channel,
+          'senderId': widget.username,
+          'text': text,
+          'fileUrl': '',
+          'fileType': '',
+          'fileName': '',
+          'timestamp': DateTime.now().toIso8601String(),
+          'isAdmin': widget.isAdmin,
+        },
+      );
+      await _fetchMessages();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Send failed: $e")));
+      }
+    }
+    if (mounted) setState(() => _sending = false);
   }
 
   Future<void> _attach() async {
@@ -176,30 +242,43 @@ class _ChatViewState extends State<_ChatView> {
     if (file.path == null) return;
     setState(() => _sending = true);
     try {
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('community_files')
-          .child(widget.classId)
-          .child('${DateTime.now().millisecondsSinceEpoch}_${file.name}');
-      await ref.putFile(File(file.path!));
-      final url = await ref.getDownloadURL();
-      await widget.messagesRef.add({
-        'senderId': widget.username,
-        'text': '',
-        'fileUrl': url,
-        'fileType': file.extension?.toLowerCase() ?? '',
-        'fileName': file.name,
-        'timestamp': FieldValue.serverTimestamp(),
-        'isAdmin': widget.isAdmin,
-      });
-      _scrollToBottom();
+      final fileId = ID.unique();
+      final uploaded = await AppwriteService.storage.createFile(
+        bucketId: 'community_files',
+        fileId: fileId,
+        file: InputFile.fromPath(
+          path: file.path!,
+          filename: file.name,
+        ),
+      );
+      final url =
+          '${AppwriteService.endpoint}/storage/buckets/community_files'
+          '/files/${uploaded.$id}/view?project=${AppwriteService.projectId}';
+
+      await AppwriteService.databases.createDocument(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'community_messages',
+        documentId: ID.unique(),
+        data: {
+          'classId': widget.classId,
+          'channel': widget.channel,
+          'senderId': widget.username,
+          'text': '',
+          'fileUrl': url,
+          'fileType': file.extension?.toLowerCase() ?? '',
+          'fileName': file.name,
+          'timestamp': DateTime.now().toIso8601String(),
+          'isAdmin': widget.isAdmin,
+        },
+      );
+      await _fetchMessages();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Upload failed: $e")));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Upload failed: $e")));
       }
     }
-    setState(() => _sending = false);
+    if (mounted) setState(() => _sending = false);
   }
 
   @override
@@ -209,44 +288,33 @@ class _ChatViewState extends State<_ChatView> {
       child: Column(
         children: [
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: widget.messagesRef.orderBy('timestamp').snapshots(),
-              builder: (context, snap) {
-                if (!snap.hasData) {
-                  return const Center(
-                      child: CircularProgressIndicator(color: AppTheme.kGreen));
-                }
-                final docs = snap.data!.docs;
-                if (docs.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      "No messages yet.\nStart the conversation!",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  );
-                }
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scroll.hasClients) {
-                    _scroll.jumpTo(_scroll.position.maxScrollExtent);
-                  }
-                });
-                return ListView.builder(
-                  controller: _scroll,
-                  padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
-                  itemCount: docs.length,
-                  itemBuilder: (_, i) {
-                    final data = docs[i].data() as Map<String, dynamic>;
-                    final isMine = data['senderId'] == widget.username;
-                    return _MessageBubble(
-                      data: data,
-                      isMine: isMine,
-                      showSenderName: widget.showSenderName,
-                    );
-                  },
-                );
-              },
-            ),
+            child: _loading
+                ? const Center(
+                    child:
+                        CircularProgressIndicator(color: AppTheme.kGreen))
+                : _messages.isEmpty
+                    ? const Center(
+                        child: Text(
+                          "No messages yet.\nStart the conversation!",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scroll,
+                        padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+                        itemCount: _messages.length,
+                        itemBuilder: (_, i) {
+                          final data = _messages[i];
+                          final isMine =
+                              data['senderId'] == widget.username;
+                          return _MessageBubble(
+                            data: data,
+                            isMine: isMine,
+                            showSenderName: widget.showSenderName,
+                          );
+                        },
+                      ),
           ),
           const Divider(height: 1, color: Color(0xFFE0E0E0)),
           _InputBar(
@@ -262,7 +330,7 @@ class _ChatViewState extends State<_ChatView> {
 }
 
 // =============================================================================
-// Admin DM list — lists enrolled students, tap to open thread
+// Admin DM list â€” lists enrolled students, tap to open thread
 // =============================================================================
 class _AdminDmListTab extends StatelessWidget {
   final String classId;
@@ -294,39 +362,53 @@ class _AdminDmListTab extends StatelessWidget {
             const Divider(height: 1, indent: 72, endIndent: 16),
         itemBuilder: (context, i) {
           final studentId = studentIds[i];
-          return FutureBuilder<DocumentSnapshot>(
-            future: FirebaseFirestore.instance
-                .collection('users')
-                .doc(studentId)
-                .get(),
+          return FutureBuilder<models.Document>(
+            future: AppwriteService.databases.getDocument(
+              databaseId: '69ecebfb0033cf785741',
+              collectionId: 'users',
+              documentId: studentId,
+            ),
             builder: (context, snap) {
               String name = studentId;
-              if (snap.hasData && snap.data!.exists) {
-                final d = snap.data!.data() as Map<String, dynamic>?;
-                name = d?['name'] as String? ?? studentId;
+              if (snap.hasData) {
+                name = snap.data!.data['name'] as String? ?? studentId;
               }
               return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                margin: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4))
                   ],
                 ),
                 child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 4),
                   leading: CircleAvatar(
                     radius: 22,
-                    backgroundColor: AppTheme.kGreen.withValues(alpha: 0.1),
+                    backgroundColor:
+                        AppTheme.kGreen.withValues(alpha: 0.1),
                     child: Text(
                       name[0].toUpperCase(),
-                      style: GoogleFonts.poppins(color: AppTheme.kGreen, fontWeight: FontWeight.bold, fontSize: 18),
+                      style: GoogleFonts.poppins(
+                          color: AppTheme.kGreen,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18),
                     ),
                   ),
-                  title: Text(name, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15)),
-                  subtitle: Text("@$studentId", style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade500)),
-                  trailing: Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey.shade300, size: 16),
+                  title: Text(name,
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                  subtitle: Text("@$studentId",
+                      style: GoogleFonts.poppins(
+                          fontSize: 12, color: Colors.grey.shade500)),
+                  trailing: Icon(Icons.arrow_forward_ios_rounded,
+                      color: Colors.grey.shade300, size: 16),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -349,7 +431,7 @@ class _AdminDmListTab extends StatelessWidget {
 }
 
 // =============================================================================
-// Full-screen DM thread page — admin navigates here
+// Full-screen DM thread page â€” admin navigates here
 // =============================================================================
 class _DmThreadPage extends StatelessWidget {
   final String classId;
@@ -383,17 +465,14 @@ class _DmThreadPage extends StatelessWidget {
                 style: const TextStyle(
                     fontWeight: FontWeight.bold, fontSize: 16)),
             Text(studentId,
-                style:
-                    const TextStyle(fontSize: 11, color: Colors.white60)),
+                style: const TextStyle(
+                    fontSize: 11, color: Colors.white60)),
           ],
         ),
       ),
       body: _ChatView(
-        messagesRef: FirebaseFirestore.instance
-            .collection('community')
-            .doc(classId)
-            .collection('dm_$studentId'),
         classId: classId,
+        channel: 'dm_$studentId',
         username: adminName,
         isAdmin: true,
         showSenderName: false,
@@ -423,9 +502,10 @@ class _MessageBubble extends StatelessWidget {
     final fileName = data['fileName'] as String? ?? '';
     final senderId = data['senderId'] as String? ?? '';
     final isAdmin = data['isAdmin'] == true;
-    final ts = data['timestamp'] as Timestamp?;
-    final timeStr =
-        ts != null ? DateFormat('hh:mm a').format(ts.toDate()) : '';
+    final tsStr = data['timestamp'] as String?;
+    final timeStr = tsStr != null
+        ? DateFormat('hh:mm a').format(DateTime.parse(tsStr))
+        : '';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -477,7 +557,9 @@ class _MessageBubble extends StatelessWidget {
                     senderId.isNotEmpty ? senderId[0].toUpperCase() : '?',
                     style: TextStyle(
                         fontSize: 11,
-                        color: isAdmin ? AppTheme.kGreen : Colors.grey.shade600,
+                        color: isAdmin
+                            ? AppTheme.kGreen
+                            : Colors.grey.shade600,
                         fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -488,13 +570,16 @@ class _MessageBubble extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    gradient: isMine 
-                      ? const LinearGradient(
-                          colors: [AppTheme.kGreen, Color(0xFF5A7A63)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
+                    gradient: isMine
+                        ? const LinearGradient(
+                            colors: [
+                              AppTheme.kGreen,
+                              Color(0xFF5A7A63)
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
                     color: isMine ? null : const Color(0xFFF1F4F2),
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(20),
@@ -656,8 +741,7 @@ class _FileAttachment extends StatelessWidget {
                   Text("Tap to open",
                       style: TextStyle(
                           fontSize: 10,
-                          color:
-                              isMine ? Colors.white70 : Colors.grey)),
+                          color: isMine ? Colors.white70 : Colors.grey)),
                 ],
               ),
             ),

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import 'app_theme.dart';
+import 'services/appwrite_service.dart';
 
 class ProfilePage extends StatefulWidget {
   final String username;
@@ -27,18 +28,27 @@ class _ProfilePageState extends State<ProfilePage> {
       return;
     }
     setState(() => _isLoading = true);
-    
+
     try {
-      // Security Check: Verify user exists before updating
-      final query = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: _usernameController.text.trim()).get();
-      if (query.docs.isEmpty) {
+      final result = await AppwriteService.databases.listDocuments(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'users',
+        queries: [Query.equal('username', _usernameController.text.trim())],
+      );
+
+      if (result.documents.isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Username not found")));
         return;
       }
-      
-      // Update Password
-      await query.docs.first.reference.update({'password': _newPasswordController.text.trim()});
-      
+
+      final docId = result.documents.first.$id;
+      await AppwriteService.databases.updateDocument(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'users',
+        documentId: docId,
+        data: {'password': _newPasswordController.text.trim()},
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Password updated successfully!")));
         Navigator.pop(context);
@@ -46,11 +56,9 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -97,9 +105,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 40),
                     ElevatedButton(
                       onPressed: _isLoading ? null : _updateProfile,
-                      child: _isLoading 
-                        ? const CircularProgressIndicator(color: Colors.white) 
-                        : const Text("Save Changes"),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text("Save Changes"),
                     ),
                   ],
                 ),

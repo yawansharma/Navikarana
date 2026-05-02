@@ -1,18 +1,15 @@
 ﻿import 'dart:async'; // Required for Splash Screen Timer
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
-
-import 'firebase_options.dart';
 import 'home_page.dart';
 import 'register_page.dart';
 import 'admin_login.dart';
 import 'dean_login.dart';
 import 'app_theme.dart';
+import 'package:appwrite/appwrite.dart';
+import 'services/appwrite_service.dart'; // or correct path
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -120,7 +117,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ],
               ),
               child: Image.asset(
-                'assets/navikarnaNew.png',
+                'assets/upasthiti.png',
                 width: 250,
                 fit: BoxFit.contain,
               ),
@@ -218,19 +215,21 @@ class _LoginPageState extends State<LoginPage> {
       final uniqueCode = uniqueCodeController.text.trim();
       final password = passwordController.text.trim();
 
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('username', isEqualTo: uniqueCode)
-          .where('password', isEqualTo: password)
-          .get();
+      final response = await AppwriteService.databases.listDocuments(
+  databaseId: '69ecebfb0033cf785741',
+  collectionId: 'users',
+  queries: [
+    Query.equal('username', uniqueCode),
+    Query.equal('password', password),
+  ],
+);
 
-      if (query.docs.isEmpty) {
-        _dismissDialogAndShow(statusText, "Invalid credentials.");
-        return;
-      }
+if (response.documents.isEmpty) {
+  _dismissDialogAndShow(statusText, "Invalid credentials.");
+  return;
+}
 
-      final doc = query.docs.first;
-      final data = doc.data();
+final data = response.documents.first.data;
 
       // RBAC Security Check
       final role = data['role'] as String?;
@@ -244,9 +243,14 @@ class _LoginPageState extends State<LoginPage> {
 
       statusText.value = "Finalizing...";
 
-      await FirebaseFirestore.instance.collection('users').doc(doc.id).update({
-        'lastLogin': FieldValue.serverTimestamp(),
-      });
+      await AppwriteService.databases.updateDocument(
+  databaseId: '69ecebfb0033cf785741',
+  collectionId: 'users',
+  documentId: response.documents.first.$id,
+  data: {
+    'lastLogin': DateTime.now().toIso8601String(),
+  },
+);
 
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -295,7 +299,7 @@ class _LoginPageState extends State<LoginPage> {
                   GestureDetector(
                     onTap: _handleSecretTap,
                     child: const Text(
-                      "Navikarana",
+                      "upasthiti",
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -433,28 +437,31 @@ class _LoginPageState extends State<LoginPage> {
                         // --- PNG EFFECT LOGO FOOTER ---
                         const SizedBox(height: 50),
                         Center(
-                          child: Opacity(
-                            opacity: 0.6,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(
+                          child: RepaintBoundary(
+                            child: Opacity(
+                              opacity: 0.6,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF6A8A73,
+                                          ).withValues(alpha: 0.15),
+                                          blurRadius: 20,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
+                                    ),
+                                    child: ColorFiltered(
+                                      colorFilter: ColorFilter.mode(
+                                        const Color(
                                           0xFF6A8A73,
-                                        ).withValues(alpha: 0.15),
-                                        blurRadius: 20,
-                                        spreadRadius: 2,
+                                        ).withValues(alpha: 0.1),
+                                        BlendMode.srcATop,
                                       ),
-<<<<<<< Updated upstream
-                                    ],
-                                  ),
-                                  child: ColorFiltered(
-                                    colorFilter: ColorFilter.mode(
-                                      const Color(
-=======
                                       child: Image.asset(
                                         'assets/upasthiti.png',
                                         width: 90,
@@ -464,34 +471,18 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    "POWERED BY navIKaraNa",
+                                    "POWERED BY upasthiti",
                                     style: TextStyle(
                                       color: const Color(
->>>>>>> Stashed changes
                                         0xFF6A8A73,
-                                      ).withValues(alpha: 0.1),
-                                      BlendMode.srcATop,
-                                    ),
-                                    child: Image.asset(
-                                      'assets/navikarnaNew.png',
-                                      width: 90,
-                                      fit: BoxFit.contain,
+                                      ).withValues(alpha: 0.8),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.5,
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  "POWERED BY NAVIKARANA",
-                                  style: TextStyle(
-                                    color: const Color(
-                                      0xFF6A8A73,
-                                    ).withValues(alpha: 0.8),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),

@@ -4,11 +4,12 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'home_page.dart';
 import 'app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:appwrite/appwrite.dart';
+import '../services/appwrite_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -44,7 +45,7 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _fetchingLocation = false;
   bool _registeringFace = false;
 
-  static const String _backendBaseUrl = "https://pasteshub-navikarana-backend.hf.space";
+  static const String _backendBaseUrl = "https://pasteshub404-navikarana-backend.hf.space";
   static const String _registerFaceEndpoint = "$_backendBaseUrl/register-face";
 
 
@@ -165,17 +166,21 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  Future<void> _registerUserInFirestore() async {
-    await FirebaseFirestore.instance.collection('users').doc(uniqueCodeController.text.trim()).set({
+  Future<void> _registerUserInAppwrite() async {
+  await AppwriteService.databases.createDocument(
+    databaseId: '69ecebfb0033cf785741',
+    collectionId: 'users',
+    documentId: ID.unique(),
+    data: {
       'name': nameController.text.trim(),
       'username': uniqueCodeController.text.trim(),
       'password': passwordController.text.trim(),
       'department': _selectedSchool,
       'latitude': latitude,
       'longitude': longitude,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
+    },
+  );
+}
 
   Future<void> _onRegisterPressed() async {
     if (_localPhoto == null) { _showSnackBar("Please add a photo first."); return; }
@@ -183,20 +188,30 @@ class _RegisterPageState extends State<RegisterPage> {
     if (passwordController.text != confirmPasswordController.text) { _showSnackBar("Passwords do not match."); return; }
     if (_selectedSchool == null) { _showSnackBar("Please select your school."); return; }
 
-    final existingUser = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: uniqueCodeController.text.trim()).get();
-    if (existingUser.docs.isNotEmpty) { _showSnackBar("Unique ID already exists."); return; }
+    final existingUser = await AppwriteService.databases.listDocuments(
+  databaseId: '69ecebfb0033cf785741',
+  collectionId: 'users',
+  queries: [
+    Query.equal('username', uniqueCodeController.text.trim()),
+  ],
+);
+    if (existingUser.documents.isNotEmpty) { _showSnackBar("Unique ID already exists."); return; }
 
     setState(() => _registeringFace = true);
-    final faceError = await _registerFaceOnBackend();
-    if (faceError != null) {
-      setState(() => _registeringFace = false);
-      _showSnackBar(faceError);
-      return;
+    try {
+      final faceError = await _registerFaceOnBackend();
+      if (faceError != null) {
+        _showSnackBar(faceError);
+        return;
+      }
+      await _registerUserInAppwrite();
+      if (!mounted) return;
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(name: nameController.text.trim(), username: uniqueCodeController.text.trim())));
+    } catch (e) {
+      if (mounted) _showSnackBar("Registration failed: $e");
+    } finally {
+      if (mounted) setState(() => _registeringFace = false);
     }
-    await _registerUserInFirestore();
-    setState(() => _registeringFace = false);
-    if (!mounted) return;
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(name: nameController.text.trim(), username: uniqueCodeController.text.trim())));
   }
 
   void _showSnackBar(String message) {
@@ -393,43 +408,22 @@ class _RegisterPageState extends State<RegisterPage> {
                     // ---------------------------------------------------------------------------
                     const SizedBox(height: 50),
                     Center(
-                      child: Opacity(
-                        opacity: 0.6,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF6A8A73).withOpacity(0.15),
-                                    blurRadius: 20,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              ),
-                              child: ColorFiltered(
-                                colorFilter: ColorFilter.mode(
-                                  const Color(0xFF6A8A73).withOpacity(0.1), 
-                                  BlendMode.srcATop,
+                      child: RepaintBoundary(
+                        child: Opacity(
+                          opacity: 0.6,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF6A8A73).withValues(alpha: 0.15),
+                                      blurRadius: 20,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
                                 ),
-<<<<<<< Updated upstream
-                                child: Image.asset(
-                                  'assets/navikarnaNew.png',
-                                  width: 90, 
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              "POWERED BY NAVIKARANA",
-                              style: TextStyle(
-                                color: const Color(0xFF6A8A73).withOpacity(0.8),
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.5,
-=======
                                 child: ColorFiltered(
                                   colorFilter: ColorFilter.mode(
                                     const Color(0xFF6A8A73).withValues(alpha: 0.1),
@@ -444,17 +438,16 @@ class _RegisterPageState extends State<RegisterPage> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                "POWERED BY navIKaraNa",
+                                "POWERED BY upasthiti",
                                 style: TextStyle(
                                   color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 1.5,
                                 ),
->>>>>>> Stashed changes
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),

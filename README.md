@@ -13,7 +13,6 @@
   <img src="https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white" alt="Dart"/>
   <img src="https://img.shields.io/badge/Appwrite-Cloud-F02E65?style=for-the-badge&logo=appwrite&logoColor=white" alt="Appwrite"/>
   <img src="https://img.shields.io/badge/Platform-Android%20|%20iOS%20|%20Windows%20|%20Web-green?style=for-the-badge" alt="Platform"/>
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License"/>
 </p>
 
 <p align="center">

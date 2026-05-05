@@ -439,13 +439,6 @@ Contributions are welcome! Here's how to get started:
 - Use `AppwriteService` for all backend interactions
 - Keep commit messages descriptive and follow [Conventional Commits](https://www.conventionalcommits.org/)
 
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
----
 
 <p align="center">
   <sub>Built with ❤️ using Flutter & Appwrite</sub><br/>

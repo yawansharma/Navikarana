@@ -401,7 +401,6 @@ assets/
 - [ ] **Offline support** — Cache attendance data locally and sync when connectivity is restored
 - [ ] **Timetable integration** — Auto-generate periods from uploaded timetable data
 - [ ] **Attendance analytics dashboard** — Charts and graphs for attendance trends, student performance
-- [ ] **Face liveness detection** — Prevent photo spoofing with blink/motion detection
 - [ ] **Multi-language support** — Hindi, English, and regional language localization
 - [ ] **Dark mode** — Full dark theme support for the student and admin interfaces
 - [ ] **QR code attendance** — Alternative quick check-in method alongside face verification

@@ -16,6 +16,7 @@ import 'app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/appwrite_service.dart';
 import 'leave_management_page.dart';
+import 'distribution/admin_distribution_tab.dart';
 
 // =============================================================================
 // AdminHomePage â€” 3-tab shell: Classes | Analytics | Settings
@@ -235,9 +236,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
                               icon: Icon(Icons.class_outlined, size: 22),
                               label: "Classes"),
                           BottomNavigationBarItem(
-                              icon:
-                                  Icon(Icons.analytics_outlined, size: 22),
+                              icon: Icon(Icons.analytics_outlined, size: 22),
                               label: "Analytics"),
+                          BottomNavigationBarItem(
+                              icon: Icon(Icons.inventory_2_outlined, size: 22),
+                              label: "Distribute"),
                           BottomNavigationBarItem(
                               icon: Icon(Icons.more_horiz_rounded, size: 22),
                               label: "Settings"),
@@ -263,6 +266,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
       case 1:
         return "Analytics";
       case 2:
+        return "Distribution";
+      case 3:
         return "Settings";
       default:
         return "";
@@ -308,6 +313,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     final tabs = [
       _buildClassesTab(),
       _buildGlobalLogsTab(),
+      AdminDistributionTab(adminId: widget.adminId, adminName: widget.adminName),
       _buildMoreTab(),
     ];
     final bool goingRight = _currentIndex > _prevIndex;

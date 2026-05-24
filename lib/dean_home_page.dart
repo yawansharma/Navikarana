@@ -7,7 +7,7 @@ import 'dean_login.dart';
 import 'admin_home_page.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
-import 'leave_management_page.dart';
+import 'distribution/dean_distribution_tab.dart';
 
 // ---------------------------------------------------------------------------
 // THEME CONSTANTS FOR DEAN
@@ -129,7 +129,8 @@ class _DeanHomePageState extends State<DeanHomePage> {
                                 MainAxisAlignment.spaceAround,
                             children: [
                               _navItem(0, Icons.people_alt, "Personnel"),
-                              _navItem(1, Icons.settings, "More"),
+                              _navItem(1, Icons.inventory_2_outlined, "Distribution"),
+                              _navItem(2, Icons.settings, "More"),
                             ],
                           ),
                         ),
@@ -150,6 +151,8 @@ class _DeanHomePageState extends State<DeanHomePage> {
       case 0:
         return "Admin Personnel";
       case 1:
+        return "Distribution";
+      case 2:
         return "System Settings";
       default:
         return "Dashboard";
@@ -161,7 +164,9 @@ class _DeanHomePageState extends State<DeanHomePage> {
       case 0:
         return _buildPersonnelTab(key: const ValueKey(0));
       case 1:
-        return _buildMoreTab(key: const ValueKey(1));
+        return const DeanDistributionTab(key: ValueKey(1));
+      case 2:
+        return _buildMoreTab(key: const ValueKey(2));
       default:
         return const SizedBox(key: ValueKey(0));
     }

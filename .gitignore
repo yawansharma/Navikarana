@@ -1,19 +1,6 @@
-# Python / Virtual Environment
-# ----------------------------
-venv/
-.venv/
-env/
-# bin/
-# lib/
-# include/
-# share/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
+# ============================================================
 # Flutter / Dart
-# --------------
+# ============================================================
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -21,21 +8,101 @@ __pycache__/
 .pub-cache/
 .pub/
 build/
-/android/app/debug
-/android/app/profile
-/android/app/release
 
-# IDEs and OS
-# -----------
+# Flutter generated files (platform-specific files are also
+# covered by their own .gitignore, but these catch root-level
+# generated artefacts and any that slipped through)
+lib/generated_plugin_registrant.dart
+lib/firebase_options.dart
+
+# ============================================================
+# Android
+# ============================================================
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+android/local.properties
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/google-services.json
+
+# ============================================================
+# iOS
+# ============================================================
+# (Detailed rules live in ios/.gitignore)
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/flutter_export_environment.sh
+ios/Runner/GeneratedPluginRegistrant.h
+ios/Runner/GeneratedPluginRegistrant.m
+
+# ============================================================
+# macOS
+# ============================================================
+# (Detailed rules live in macos/.gitignore)
+macos/Flutter/ephemeral/
+macos/Flutter/GeneratedPluginRegistrant.swift
+
+# ============================================================
+# Windows
+# ============================================================
+# (Detailed rules live in windows/.gitignore)
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/flutter/generated_plugins.cmake
+
+# ============================================================
+# Linux
+# ============================================================
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugin_registrant.h
+linux/flutter/generated_plugins.cmake
+
+# ============================================================
+# IDEs and editors
+# ============================================================
 .idea/
 .vscode/
 *.iml
 .DS_Store
+Thumbs.db
+
+# ============================================================
+# AI tooling (Claude Code, Copilot, etc.)
+# ============================================================
+.claude/
+
+# ============================================================
+# Flutter project metadata (machine-local)
+# ============================================================
+.metadata
+
+# ============================================================
+# Firebase
+# (google-services.json and firebase_options.dart contain
+# project config; keep firebase.json which is safe to commit)
+# ============================================================
 android/app/google-services.json
+ios/GoogleService-Info.plist
 lib/firebase_options.dart
-lib/generated_plugin_registrant.dart
+
+# ============================================================
+# Python / Virtual environments
+# (present in this repo via .github hooks)
+# ============================================================
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ============================================================
+# Logs and temp files
+# ============================================================
 *.log
-windows/flutter/generated_plugin_registrant.cc
-windows/flutter/generated_plugins.cmake
-windows/flutter/generated_plugin_registrant.cc
-windows/flutter/generated_plugins.cmake
+*.tmp
+*.bak

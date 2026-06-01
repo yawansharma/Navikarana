@@ -586,6 +586,8 @@ class _AdminListTabState extends State<_AdminListTab> {
                                 'department': selectedDept,
                                 'level': selectedLevel,
                                 'managedClasses': [],
+                                'reportsToL1': '',
+                                'supervisedByL2': '',
                                 'createdAt':
                                     DateTime.now().toIso8601String(),
                               },
@@ -847,6 +849,28 @@ class _AdminListTabState extends State<_AdminListTab> {
     );
   }
 
+  // ── Level colour/icon/label helpers ────────────────────────────────────────
+  static const _levelMeta = {
+    1: (
+      color: Color(0xFF6A8A73),   // sage green
+      icon: Icons.class_outlined,
+      label: "Level 1",
+      scope: "Class management",
+    ),
+    2: (
+      color: Color(0xFF4E7A8A),   // teal-blue
+      icon: Icons.domain_outlined,
+      label: "Level 2",
+      scope: "Department oversight",
+    ),
+    3: (
+      color: Color(0xFF7A6A8A),   // muted violet
+      icon: Icons.account_balance_outlined,
+      label: "Level 3",
+      scope: "Institution control",
+    ),
+  };
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -860,8 +884,7 @@ class _AdminListTabState extends State<_AdminListTab> {
             style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: kDeanDark))
+          ? const Center(child: CircularProgressIndicator(color: kDeanDark))
           : _admins.isEmpty
               ? Center(
                   child: Column(
@@ -878,118 +901,298 @@ class _AdminListTabState extends State<_AdminListTab> {
                     ],
                   ),
                 )
-              : ListView.builder(
-                  padding:
-                      const EdgeInsets.fromLTRB(20, 20, 20, 100),
-                  itemCount: _admins.length,
-                  itemBuilder: (context, index) {
-                    final doc = _admins[index];
-                    final data = doc.data;
-                    final isActive = data['status'] != 'disabled';
-                    final String? lastLoginStr =
-                        data['lastLogin'] as String?;
+              : _buildGroupedList(),
+    );
+  }
 
-                    return Card(
-                      margin:
-                          const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(
-                              color: Colors.grey.shade200)),
-                      elevation: 0,
-                      color: Colors.white,
-                      child: InkWell(
-                        onTap: () => _showAdminDetails(doc),
-                        borderRadius:
-                            BorderRadius.circular(16),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: isActive
-                                    ? kDeanGold
-                                        .withValues(alpha: 0.1)
-                                    : Colors.red
-                                        .withValues(alpha: 0.1),
-                                child: Icon(
-                                    Icons
-                                        .admin_panel_settings,
-                                    color: isActive
-                                        ? kDeanGold
-                                        : Colors.red),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                        data['name'] as String? ??
-                                            data['username']
-                                                as String? ??
-                                            '',
-                                        style: const TextStyle(
-                                            fontWeight:
-                                                FontWeight.bold,
-                                            fontSize: 16)),
-                                    const SizedBox(height: 2),
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets
-                                              .symmetric(
-                                              horizontal: 6,
-                                              vertical: 2),
-                                          decoration: BoxDecoration(
-                                              color: Colors
-                                                  .grey.shade100,
-                                              borderRadius:
-                                                  BorderRadius
-                                                      .circular(4)),
-                                          child: Text(
-                                              data['department']
-                                                      as String? ??
-                                                  'No Dept',
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors
-                                                      .grey.shade700,
-                                                  fontWeight:
-                                                      FontWeight
-                                                          .bold)),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                            "â€¢  ${data['username']}",
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors
-                                                    .grey.shade500)),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      lastLoginStr != null
-                                          ? "Last login: ${DateFormat('MMM dd, hh:mm a').format(DateTime.parse(lastLoginStr))}"
-                                          : "Never logged in",
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey.shade400),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(Icons.chevron_right,
-                                  color: Colors.grey.shade300),
-                            ],
-                          ),
+  Widget _buildGroupedList() {
+    // Bucket admins by level (default to 1 if missing)
+    final Map<int, List<models.Document>> grouped = {1: [], 2: [], 3: []};
+    for (final doc in _admins) {
+      final lvl = (doc.data['level'] as int?) ?? 1;
+      final clamped = (lvl >= 1 && lvl <= 3) ? lvl : 1;
+      grouped[clamped]!.add(doc);
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      children: [
+        // Summary strip
+        _buildSummaryStrip(grouped),
+        const SizedBox(height: 20),
+
+        // One section per level — only render if non-empty
+        for (final level in [1, 2, 3])
+          if (grouped[level]!.isNotEmpty) ...[
+            _buildLevelHeader(level, grouped[level]!.length),
+            const SizedBox(height: 10),
+            ...grouped[level]!.map((doc) => _buildAdminCard(doc)),
+            const SizedBox(height: 20),
+          ],
+      ],
+    );
+  }
+
+  // ── Summary strip (three mini-stat tiles) ──────────────────────────────────
+  Widget _buildSummaryStrip(Map<int, List<models.Document>> grouped) {
+    return Row(
+      children: [1, 2, 3].map((lvl) {
+        final meta = _levelMeta[lvl]!;
+        final count = grouped[lvl]?.length ?? 0;
+        return Expanded(
+          child: Container(
+            margin: EdgeInsets.only(right: lvl < 3 ? 10 : 0),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                  color: meta.color.withValues(alpha: 0.2), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                    color: meta.color.withValues(alpha: 0.07),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3)),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: meta.color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(meta.icon, color: meta.color, size: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  count.toString(),
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: meta.color),
+                ),
+                Text(
+                  meta.label,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── Section header for each level ─────────────────────────────────────────
+  Widget _buildLevelHeader(int level, int count) {
+    final meta = _levelMeta[level]!;
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: meta.color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(meta.icon, color: meta.color, size: 18),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              meta.label,
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: meta.color),
+            ),
+            Text(
+              meta.scope,
+              style: const TextStyle(fontSize: 11, color: Colors.black45),
+            ),
+          ],
+        ),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: meta.color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            "$count ${count == 1 ? 'admin' : 'admins'}",
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: meta.color),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Individual admin card ──────────────────────────────────────────────────
+  Widget _buildAdminCard(models.Document doc) {
+    final data = doc.data;
+    final isActive = data['status'] != 'disabled';
+    final String? lastLoginStr = data['lastLogin'] as String?;
+    final int level = (data['level'] as int?) ?? 1;
+    final meta = _levelMeta[level] ??
+        (color: kDeanGold, icon: Icons.admin_panel_settings, label: "L?", scope: "");
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2)),
+        ],
+      ),
+      child: InkWell(
+        onTap: () => _showAdminDetails(doc),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              // Avatar with level-coloured ring
+              Stack(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: meta.color.withValues(alpha: 0.35), width: 2),
+                      color: isActive
+                          ? meta.color.withValues(alpha: 0.08)
+                          : Colors.red.withValues(alpha: 0.07),
+                    ),
+                    child: Icon(
+                      Icons.admin_panel_settings,
+                      color: isActive ? meta.color : Colors.red,
+                      size: 22,
+                    ),
+                  ),
+                  // Tiny level badge on avatar
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: meta.color,
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "$level",
+                          style: const TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 14),
+
+              // Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            data['name'] as String? ??
+                                data['username'] as String? ??
+                                '',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (!isActive)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text("DISABLED",
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(4)),
+                          child: Text(
+                            data['department'] as String? ?? 'No Dept',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          "• ${data['username']}",
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      lastLoginStr != null
+                          ? "Last login: ${DateFormat('MMM dd, hh:mm a').format(DateTime.parse(lastLoginStr))}"
+                          : "Never logged in",
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade400),
+                    ),
+                  ],
                 ),
+              ),
+
+              Icon(Icons.chevron_right, color: Colors.grey.shade300),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

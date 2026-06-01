@@ -17,6 +17,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'services/appwrite_service.dart';
 import 'leave_management_page.dart';
 import 'distribution/admin_distribution_tab.dart';
+import 'services/admin_hierarchy_service.dart';
+import 'admin_hierarchy_views.dart';
 
 // =============================================================================
 // AdminHomePage â€” 3-tab shell: Classes | Analytics | Settings
@@ -62,8 +64,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
   @override
   void initState() {
     super.initState();
-    _fetchClasses();
-    _fetchLogs();
+    _fetchClasses().then((_) {
+      if (mounted) _fetchLogs();
+    });
     _classesSub = AppwriteService.realtime
         .subscribe(['databases.main_db.collections.classes.documents']);
     _classesSub!.stream.listen((_) {
@@ -85,14 +88,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   Future<void> _fetchClasses() async {
     try {
-      final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
-        collectionId: 'classes',
-        queries: [Query.equal('createdBy', widget.adminId)],
+      final docs = await AdminHierarchyService.fetchClassesForAdmin(
+        adminId: widget.adminId,
+        adminLevel: widget.adminLevel,
       );
       if (mounted) {
         setState(() {
-          _classes = result.documents;
+          _classes = docs;
           _classesLoading = false;
         });
       }
@@ -103,18 +105,56 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   Future<void> _fetchLogs() async {
     try {
-      final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
-        collectionId: 'attendance_logs',
-        queries: [
-          Query.equal('adminId', widget.adminId),
-          Query.orderDesc('timestamp'),
-          Query.limit(5000),
-        ],
-      );
+      List<String> classIds =
+          _classes.map((c) => c.$id).toList();
+      if (classIds.isEmpty && widget.adminLevel != 1) {
+        if (mounted) {
+          setState(() {
+            _logs = [];
+            _logsLoading = false;
+          });
+        }
+        return;
+      }
+
+      final List<models.Document> allLogs = [];
+      if (widget.adminLevel == 1) {
+        final result = await AppwriteService.databases.listDocuments(
+          databaseId: '69ecebfb0033cf785741',
+          collectionId: 'attendance_logs',
+          queries: [
+            Query.equal('adminId', widget.adminId),
+            Query.orderDesc('timestamp'),
+            Query.limit(5000),
+          ],
+        );
+        allLogs.addAll(result.documents);
+      } else {
+        for (final classId in classIds) {
+          try {
+            final result = await AppwriteService.databases.listDocuments(
+              databaseId: '69ecebfb0033cf785741',
+              collectionId: 'attendance_logs',
+              queries: [
+                Query.equal('classId', classId),
+                Query.orderDesc('timestamp'),
+                Query.limit(500),
+              ],
+            );
+            allLogs.addAll(result.documents);
+          } catch (_) {}
+        }
+        allLogs.sort((a, b) {
+          final ta = a.data['timestamp'] as String? ?? '';
+          final tb = b.data['timestamp'] as String? ?? '';
+          return tb.compareTo(ta);
+        });
+      }
+
+      final result = allLogs;
       if (mounted) {
         setState(() {
-          _logs = result.documents;
+          _logs = result;
           _logsLoading = false;
         });
       }
@@ -231,10 +271,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         showUnselectedLabels: false,
                         elevation: 0,
                         type: BottomNavigationBarType.fixed,
-                        items: const [
+                        items: [
                           BottomNavigationBarItem(
-                              icon: Icon(Icons.class_outlined, size: 22),
-                              label: "Classes"),
+                              icon: Icon(
+                                  widget.adminLevel == 2
+                                      ? Icons.groups_outlined
+                                      : Icons.class_outlined,
+                                  size: 22),
+                              label: widget.adminLevel == 2 ? "Team" : "Classes"),
                           BottomNavigationBarItem(
                               icon: Icon(Icons.analytics_outlined, size: 22),
                               label: "Analytics"),
@@ -262,7 +306,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   String _tabTitle() {
     switch (_currentIndex) {
       case 0:
-        return "Classes";
+        return widget.adminLevel == 2 ? "Team" : "Classes";
       case 1:
         return "Analytics";
       case 2:
@@ -347,6 +391,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
   // TAB 0 â€” CLASSES
   // ===========================================================================
   Widget _buildClassesTab() {
+    if (widget.adminLevel == 2) {
+      return L2TeamTab(adminId: widget.adminId, adminName: widget.adminName);
+    }
+
     if (_classesLoading) {
       return const Center(
           child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
@@ -355,14 +403,27 @@ class _AdminHomePageState extends State<AdminHomePage> {
     return Stack(
       children: [
         _classes.isEmpty
-            ? const Center(
-                child: Text("No classes yet. Create one!",
-                    style: TextStyle(color: Colors.grey)))
+            ? Center(
+                child: Text(
+                  widget.adminLevel == 3
+                      ? "No classes assigned to you yet."
+                      : "No classes yet. Create one!",
+                  style: const TextStyle(color: Colors.grey),
+                ))
             : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
-                itemCount: _classes.length,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                itemCount: _classes.length +
+                    (widget.adminLevel == 1 ? 1 : 0),
                 itemBuilder: (context, index) {
-                  final classDoc = _classes[index];
+                  if (widget.adminLevel == 1 && index == 0) {
+                    return L1OrganizationPanel(
+                      classes: _classes,
+                      l1AdminId: widget.adminId,
+                    );
+                  }
+                  final classIndex =
+                      widget.adminLevel == 1 ? index - 1 : index;
+                  final classDoc = _classes[classIndex];
                   final data = classDoc.data;
                   final List<dynamic> studentIds =
                       data['studentIds'] as List<dynamic>? ?? [];
@@ -463,11 +524,24 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
                                       ),
+                                      ClassAssignmentChips(classData: data),
+                                      if (widget.adminLevel == 3) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          "${studentIds.length} member(s)",
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
                               ),
                             ),
+                            if (widget.adminLevel != 3)
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
@@ -519,30 +593,118 @@ class _AdminHomePageState extends State<AdminHomePage> {
     final nameCtrl = TextEditingController();
     final codeCtrl = TextEditingController();
     Map<String, dynamic>? pendingBoundary;
+  models.Document? selectedL3;
+  models.Document? selectedL2;
+  List<models.Document> l3Admins = [];
+  List<models.Document> l2Admins = [];
+  bool adminsLoading = true;
+  bool adminsLoadStarted = false;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) => AlertDialog(
+        builder: (ctx, setSt) {
+          if (adminsLoading && !adminsLoadStarted) {
+            adminsLoadStarted = true;
+            Future.wait([
+              AdminHierarchyService.listAdminsByLevel(3),
+              AdminHierarchyService.listAdminsByLevel(2),
+            ]).then((results) {
+              if (ctx.mounted) {
+                setSt(() {
+                  l3Admins = results[0];
+                  l2Admins = results[1];
+                  adminsLoading = false;
+                });
+              }
+            });
+          }
+          return AlertDialog(
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20)),
           title: const Text("Create Class",
               style: TextStyle(fontWeight: FontWeight.bold)),
-          content: Column(
+          content: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
+                onChanged: (_) => setSt(() {}),
                 decoration: const InputDecoration(
                     labelText: "Class Name (e.g. CS101)"),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: codeCtrl,
+                onChanged: (_) => setSt(() {}),
                 decoration: const InputDecoration(
                     labelText: "Join Code (e.g. CS101-2024)"),
               ),
               const SizedBox(height: 16),
+              if (adminsLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else ...[
+                DropdownButtonFormField<models.Document?>(
+                  value: selectedL3,
+                  decoration: const InputDecoration(
+                    labelText: 'Class head (Level 3 admin)',
+                    helperText: 'Optional — manages this class',
+                  ),
+                  items: [
+                    const DropdownMenuItem<models.Document?>(
+                      value: null,
+                      child: Text('None'),
+                    ),
+                    ...l3Admins.map((doc) => DropdownMenuItem(
+                          value: doc,
+                          child: Text(
+                            '${AdminHierarchyService.displayName(doc)} (${AdminHierarchyService.username(doc)})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )),
+                  ],
+                  onChanged: (v) => setSt(() {
+                    selectedL3 = v;
+                    if (v == null) selectedL2 = null;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<models.Document?>(
+                  value: selectedL2,
+                  decoration: InputDecoration(
+                    labelText: 'Level 2 supervisor',
+                    helperText: selectedL3 == null
+                        ? 'Select a class head first'
+                        : 'Supervises the assigned Level 3 admin',
+                  ),
+                  items: [
+                    const DropdownMenuItem<models.Document?>(
+                      value: null,
+                      child: Text('None'),
+                    ),
+                    ...l2Admins.map((doc) => DropdownMenuItem(
+                          value: doc,
+                          child: Text(
+                            '${AdminHierarchyService.displayName(doc)} (${AdminHierarchyService.username(doc)})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )),
+                  ],
+                  onChanged: selectedL3 == null
+                      ? null
+                      : (v) => setSt(() => selectedL2 = v),
+                ),
+                const SizedBox(height: 8),
+              ],
+              const SizedBox(height: 8),
               GestureDetector(
                 onTap: () async {
                   final result = await _openBoundaryPickerForCreate(
@@ -607,13 +769,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
               ),
             ],
           ),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text("Cancel"),
             ),
-            StatefulBuilder(
-              builder: (_, setBtn) => ElevatedButton(
+            ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6A8A73),
                   foregroundColor: Colors.white,
@@ -623,10 +785,21 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         codeCtrl.text.isNotEmpty &&
                         pendingBoundary != null
                     ? () async {
+                        final headId =
+                            AdminHierarchyService.username(selectedL3);
+                        final headName = selectedL3 != null
+                            ? AdminHierarchyService.displayName(selectedL3!)
+                            : null;
+                        final supId =
+                            AdminHierarchyService.username(selectedL2);
+                        final supName = selectedL2 != null
+                            ? AdminHierarchyService.displayName(selectedL2!)
+                            : null;
+                        final classId = ID.unique();
                         await AppwriteService.databases.createDocument(
                           databaseId: '69ecebfb0033cf785741',
                           collectionId: 'classes',
-                          documentId: ID.unique(),
+                          documentId: classId,
                           data: {
                             'className': nameCtrl.text.trim(),
                             'classCode': codeCtrl.text.trim(),
@@ -634,7 +807,23 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             'createdBy': widget.adminId,
                             'studentIds': <String>[],
                             'boundary': jsonEncode(pendingBoundary),
+                            if (headId != null && headId.isNotEmpty)
+                              'headAdminId': headId,
+                            if (headName != null && headName.isNotEmpty)
+                              'headAdminName': headName,
+                            if (supId != null && supId.isNotEmpty)
+                              'supervisorId': supId,
+                            if (supName != null && supName.isNotEmpty)
+                              'supervisorName': supName,
                           },
+                        );
+                        await AdminHierarchyService.linkClassStaff(
+                          classDocId: classId,
+                          l1AdminId: widget.adminId,
+                          headAdminId: headId,
+                          headAdminName: headName,
+                          supervisorId: supId,
+                          supervisorName: supName,
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
                         _fetchClasses();
@@ -642,9 +831,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     : null,
                 child: const Text("Create"),
               ),
-            ),
           ],
-        ),
+        );
+        },
       ),
     );
   }

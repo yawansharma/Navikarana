@@ -586,8 +586,6 @@ class _AdminListTabState extends State<_AdminListTab> {
                                 'department': selectedDept,
                                 'level': selectedLevel,
                                 'managedClasses': [],
-                                'reportsToL1': '',
-                                'supervisedByL2': '',
                                 'createdAt':
                                     DateTime.now().toIso8601String(),
                               },
@@ -853,9 +851,9 @@ class _AdminListTabState extends State<_AdminListTab> {
   static const _levelMeta = {
     1: (
       color: Color(0xFF6A8A73),   // sage green
-      icon: Icons.class_outlined,
+      icon: Icons.account_balance_outlined,
       label: "Level 1",
-      scope: "Class management",
+      scope: "Institution control",
     ),
     2: (
       color: Color(0xFF4E7A8A),   // teal-blue
@@ -865,9 +863,9 @@ class _AdminListTabState extends State<_AdminListTab> {
     ),
     3: (
       color: Color(0xFF7A6A8A),   // muted violet
-      icon: Icons.account_balance_outlined,
+      icon: Icons.class_outlined,
       label: "Level 3",
-      scope: "Institution control",
+      scope: "Class management",
     ),
   };
 

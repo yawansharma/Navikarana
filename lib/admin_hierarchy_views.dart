@@ -22,7 +22,8 @@ class L1OrganizationPanel extends StatelessWidget {
     final unassigned = <models.Document>[];
 
     for (final c in classes) {
-      final sup = c.data['supervisorId'] as String? ?? '';
+      final a = AdminHierarchyService.readAssignments(c.data);
+      final sup = a.supervisorId ?? '';
       if (sup.isEmpty) {
         unassigned.add(c);
       } else {
@@ -85,7 +86,7 @@ class L1OrganizationPanel extends StatelessWidget {
           ],
           if (unassigned.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text('Unassigned supervision',
+            Text('No Level 2 supervisor',
                 style: GoogleFonts.poppins(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -99,7 +100,8 @@ class L1OrganizationPanel extends StatelessWidget {
   }
 
   Widget _supervisorGroup(String supervisorId, List<models.Document> group) {
-    final supName = group.first.data['supervisorName'] as String? ?? supervisorId;
+    final a = AdminHierarchyService.readAssignments(group.first.data);
+    final supName = a.supervisorName ?? supervisorId;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -127,7 +129,8 @@ class L1OrganizationPanel extends StatelessWidget {
 
   Widget _classRow(models.Document c) {
     final d = c.data;
-    final head = d['headAdminName'] as String? ?? d['headAdminId'] as String?;
+    final a = AdminHierarchyService.readAssignments(d);
+    final head = a.headAdminName ?? a.headAdminId;
     return Container(
       margin: const EdgeInsets.only(left: 8, top: 4, bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -146,7 +149,7 @@ class L1OrganizationPanel extends StatelessWidget {
                 Text(d['className'] as String? ?? 'Class',
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13)),
-                if (head != null && head.toString().isNotEmpty)
+                if (head != null && head.isNotEmpty)
                   Text('Head: $head',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
@@ -196,7 +199,7 @@ class L2TeamTab extends StatefulWidget {
 class _L2TeamTabState extends State<L2TeamTab> {
   bool _loading = true;
   List<models.Document> _l3Admins = [];
-  models.Document? _myProfile;
+  String? _reportsToL1Id;
   String? _reportsToL1Name;
 
   @override
@@ -207,23 +210,14 @@ class _L2TeamTabState extends State<L2TeamTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final l3s = await AdminHierarchyService.listL3UnderSupervisor(widget.adminId);
-    final me = await AdminHierarchyService.findUserByUsername(widget.adminId);
-    String? l1Name;
-    if (me != null) {
-      final l1Id = me.data['reportsToL1'] as String?;
-      if (l1Id != null && l1Id.isNotEmpty) {
-        final l1 = await AdminHierarchyService.findUserByUsername(l1Id);
-        l1Name = l1 != null
-            ? AdminHierarchyService.displayName(l1)
-            : l1Id;
-      }
-    }
+    final l3s =
+        await AdminHierarchyService.listL3UnderSupervisor(widget.adminId);
+    final l1 = await AdminHierarchyService.resolveReportingL1(widget.adminId);
     if (mounted) {
       setState(() {
         _l3Admins = l3s;
-        _myProfile = me;
-        _reportsToL1Name = l1Name;
+        _reportsToL1Id = l1.id;
+        _reportsToL1Name = l1.name;
         _loading = false;
       });
     }
@@ -260,7 +254,6 @@ class _L2TeamTabState extends State<L2TeamTab> {
   }
 
   Widget _reportingCard() {
-    final l1Id = _myProfile?.data['reportsToL1'] as String?;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -282,14 +275,17 @@ class _L2TeamTabState extends State<L2TeamTab> {
                   color: Colors.white70, fontSize: 12)),
           const SizedBox(height: 6),
           Text(
-            _reportsToL1Name ?? (l1Id?.isNotEmpty == true ? l1Id! : 'Not assigned yet'),
+            _reportsToL1Name ??
+                (_reportsToL1Id?.isNotEmpty == true
+                    ? _reportsToL1Id!
+                    : 'Not assigned yet'),
             style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold),
           ),
-          if (l1Id != null && l1Id.isNotEmpty)
-            Text('Level 1 • $l1Id',
+          if (_reportsToL1Id != null && _reportsToL1Id!.isNotEmpty)
+            Text('Level 1 • $_reportsToL1Id',
                 style: GoogleFonts.poppins(
                     color: Colors.white60, fontSize: 12)),
         ],
@@ -310,8 +306,8 @@ class _L2TeamTabState extends State<L2TeamTab> {
               size: 48, color: Colors.grey.shade400),
           const SizedBox(height: 12),
           Text(
-            'No Level 3 admins assigned under you yet.\n'
-            'A Level 1 admin assigns you when creating a class.',
+            'No Level 3 admins under your supervision yet.\n'
+            'Ask your Level 1 admin to assign you on a class.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
@@ -380,13 +376,11 @@ class ClassAssignmentChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final head = classData['headAdminName'] as String? ??
-        classData['headAdminId'] as String?;
-    final sup = classData['supervisorName'] as String? ??
-        classData['supervisorId'] as String?;
+    final a = AdminHierarchyService.readAssignments(classData);
+    final head = a.headAdminName ?? a.headAdminId;
+    final sup = a.supervisorName ?? a.supervisorId;
 
-    if ((head == null || head.toString().isEmpty) &&
-        (sup == null || sup.toString().isEmpty)) {
+    if ((head == null || head.isEmpty) && (sup == null || sup.isEmpty)) {
       return const SizedBox.shrink();
     }
 
@@ -396,9 +390,9 @@ class ClassAssignmentChips extends StatelessWidget {
         spacing: 6,
         runSpacing: 4,
         children: [
-          if (head != null && head.toString().isNotEmpty)
+          if (head != null && head.isNotEmpty)
             _chip(Icons.person_pin_outlined, 'Head: $head', const Color(0xFF7A6A8A)),
-          if (sup != null && sup.toString().isNotEmpty)
+          if (sup != null && sup.isNotEmpty)
             _chip(Icons.supervisor_account, 'L2: $sup', const Color(0xFF4E7A8A)),
         ],
       ),
@@ -426,4 +420,260 @@ class ClassAssignmentChips extends StatelessWidget {
       ),
     );
   }
+}
+
+/// L1: reassign Level 3 head and Level 2 supervisor for a class.
+Future<void> showClassStaffAssignmentSheet({
+  required BuildContext context,
+  required models.Document classDoc,
+  required String l1AdminId,
+  VoidCallback? onSaved,
+}) async {
+  final classData = classDoc.data;
+  final className = classData['className'] as String? ?? 'Class';
+  final current = AdminHierarchyService.readAssignments(classData);
+
+  String? selectedL3Id = current.headAdminId;
+  String? selectedL2Id = current.supervisorId;
+  List<models.Document> l3Admins = [];
+  List<models.Document> l2Admins = [];
+  bool loadingAdmins = true;
+  bool saving = false;
+  bool loadStarted = false;
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSt) {
+        if (loadingAdmins && !loadStarted) {
+          loadStarted = true;
+          () async {
+            try {
+              final l1 =
+                  await AdminHierarchyService.findUserByUsername(l1AdminId);
+              final dept = l1?.data['department'] as String?;
+              if (!ctx.mounted) return;
+              if (dept == null || dept.trim().isEmpty) {
+                setSt(() {
+                  l3Admins = [];
+                  l2Admins = [];
+                  loadingAdmins = false;
+                });
+                return;
+              }
+              final results = await Future.wait([
+                AdminHierarchyService.listAdminsByLevel(
+                  3,
+                  department: dept,
+                ),
+                AdminHierarchyService.listAdminsByLevel(
+                  2,
+                  department: dept,
+                ),
+              ]);
+              if (!ctx.mounted) return;
+              setSt(() {
+                l3Admins = results[0];
+                l2Admins = results[1];
+                loadingAdmins = false;
+              });
+            } catch (_) {
+              if (!ctx.mounted) return;
+              setSt(() {
+                l3Admins = [];
+                l2Admins = [];
+                loadingAdmins = false;
+              });
+            }
+          }();
+        }
+
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Assign staff',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                className,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              if (loadingAdmins)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                DropdownButtonFormField<String?>(
+                  value: selectedL3Id,
+                  decoration: const InputDecoration(
+                    labelText: 'Class head (Level 3)',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('None'),
+                    ),
+                    ...l3Admins.map((doc) {
+                      final id = AdminHierarchyService.username(doc) ?? '';
+                      return DropdownMenuItem<String?>(
+                        value: id,
+                        child: Text(
+                          '${AdminHierarchyService.displayName(doc)} ($id)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (v) => setSt(() {
+                    selectedL3Id = v;
+                    if (v == null) selectedL2Id = null;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  value: selectedL2Id,
+                  decoration: InputDecoration(
+                    labelText: 'Level 2 supervisor',
+                    border: const OutlineInputBorder(),
+                    helperText: selectedL3Id == null
+                        ? 'Select a class head first'
+                        : null,
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('None'),
+                    ),
+                    ...l2Admins.map((doc) {
+                      final id = AdminHierarchyService.username(doc) ?? '';
+                      return DropdownMenuItem<String?>(
+                        value: id,
+                        child: Text(
+                          '${AdminHierarchyService.displayName(doc)} ($id)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: selectedL3Id == null
+                      ? null
+                      : (v) => setSt(() => selectedL2Id = v),
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6A8A73),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: saving || loadingAdmins
+                      ? null
+                      : () async {
+                          String? headName;
+                          String? supName;
+                          for (final doc in l3Admins) {
+                            if (AdminHierarchyService.username(doc) ==
+                                selectedL3Id) {
+                              headName =
+                                  AdminHierarchyService.displayName(doc);
+                              break;
+                            }
+                          }
+                          for (final doc in l2Admins) {
+                            if (AdminHierarchyService.username(doc) ==
+                                selectedL2Id) {
+                              supName =
+                                  AdminHierarchyService.displayName(doc);
+                              break;
+                            }
+                          }
+
+                          setSt(() => saving = true);
+                          try {
+                            await AdminHierarchyService.persistClassAssignments(
+                              classDocId: classDoc.$id,
+                              classData: classData,
+                              l1AdminId: l1AdminId,
+                              headAdminId: selectedL3Id,
+                              headAdminName: headName,
+                              supervisorId: selectedL2Id,
+                              supervisorName: supName,
+                              previous: current,
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            onSaved?.call();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Staff updated for $className.',
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text('Update failed: $e'),
+                                  backgroundColor: Colors.red.shade700,
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (ctx.mounted) setSt(() => saving = false);
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Save assignments',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
 }

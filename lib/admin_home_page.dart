@@ -44,6 +44,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   int _prevIndex = 0;
   DateTimeRange? _dateRange;
   String? _classFilter;
+  String? _adminDepartment;
 
   // Classes tab state
   List<models.Document> _classes = [];
@@ -64,6 +65,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   @override
   void initState() {
     super.initState();
+    _fetchAdminProfile();
     _fetchClasses().then((_) {
       if (mounted) _fetchLogs();
     });
@@ -77,6 +79,27 @@ class _AdminHomePageState extends State<AdminHomePage> {
     _logsSub!.stream.listen((_) {
       if (mounted) _fetchLogs();
     });
+  }
+
+  Future<void> _fetchAdminProfile() async {
+    try {
+      final res = await AppwriteService.databases.listDocuments(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'users',
+        queries: [
+          Query.equal('username', widget.adminId),
+          Query.limit(1),
+        ],
+      );
+      if (res.documents.isNotEmpty && mounted) {
+        setState(() {
+          _adminDepartment =
+              res.documents.first.data['department'] as String?;
+        });
+      }
+    } catch (_) {
+      // ignore – department filter is best-effort
+    }
   }
 
   @override
@@ -562,6 +585,20 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 ),
                               ],
                             ),
+                            if (widget.adminLevel < 2)
+                              IconButton(
+                                tooltip: 'Assign Level 2 & 3 admins',
+                                icon: const Icon(Icons.manage_accounts_outlined,
+                                    color: Color(0xFF6A8A73), size: 22),
+                                onPressed: () {
+                                  showClassStaffAssignmentSheet(
+                                    context: context,
+                                    classDoc: classDoc,
+                                    l1AdminId: widget.adminId,
+                                    onSaved: _fetchClasses,
+                                  );
+                                },
+                              ),
                             const SizedBox(width: 4),
                             const Icon(Icons.chevron_right,
                                 color: Colors.grey, size: 18),
@@ -593,12 +630,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
     final nameCtrl = TextEditingController();
     final codeCtrl = TextEditingController();
     Map<String, dynamic>? pendingBoundary;
-  models.Document? selectedL3;
-  models.Document? selectedL2;
-  List<models.Document> l3Admins = [];
-  List<models.Document> l2Admins = [];
-  bool adminsLoading = true;
-  bool adminsLoadStarted = false;
+    String? selectedL3Id;
+    String? selectedL2Id;
+    List<models.Document> l3Admins = [];
+    List<models.Document> l2Admins = [];
+    bool adminsLoading = true;
+    bool adminsLoadStarted = false;
+    bool saving = false;
 
     showDialog(
       context: context,
@@ -606,18 +644,34 @@ class _AdminHomePageState extends State<AdminHomePage> {
         builder: (ctx, setSt) {
           if (adminsLoading && !adminsLoadStarted) {
             adminsLoadStarted = true;
-            Future.wait([
-              AdminHierarchyService.listAdminsByLevel(3),
-              AdminHierarchyService.listAdminsByLevel(2),
-            ]).then((results) {
-              if (ctx.mounted) {
-                setSt(() {
-                  l3Admins = results[0];
-                  l2Admins = results[1];
-                  adminsLoading = false;
-                });
-              }
-            });
+            if (_adminDepartment == null ||
+                _adminDepartment!.trim().isEmpty) {
+              // No department – treat as no matching admins
+              setSt(() {
+                l3Admins = [];
+                l2Admins = [];
+                adminsLoading = false;
+              });
+            } else {
+              Future.wait([
+                AdminHierarchyService.listAdminsByLevel(
+                  3,
+                  department: _adminDepartment,
+                ),
+                AdminHierarchyService.listAdminsByLevel(
+                  2,
+                  department: _adminDepartment,
+                ),
+              ]).then((results) {
+                if (ctx.mounted) {
+                  setSt(() {
+                    l3Admins = results[0];
+                    l2Admins = results[1];
+                    adminsLoading = false;
+                  });
+                }
+              });
+            }
           }
           return AlertDialog(
           shape: RoundedRectangleBorder(
@@ -652,55 +706,61 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   ),
                 )
               else ...[
-                DropdownButtonFormField<models.Document?>(
-                  value: selectedL3,
+                DropdownButtonFormField<String?>(
+                  value: selectedL3Id,
                   decoration: const InputDecoration(
                     labelText: 'Class head (Level 3 admin)',
                     helperText: 'Optional — manages this class',
                   ),
                   items: [
-                    const DropdownMenuItem<models.Document?>(
+                    const DropdownMenuItem<String?>(
                       value: null,
                       child: Text('None'),
                     ),
-                    ...l3Admins.map((doc) => DropdownMenuItem(
-                          value: doc,
-                          child: Text(
-                            '${AdminHierarchyService.displayName(doc)} (${AdminHierarchyService.username(doc)})',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        )),
+                    ...l3Admins.map((doc) {
+                      final id = AdminHierarchyService.username(doc) ?? '';
+                      return DropdownMenuItem<String?>(
+                        value: id,
+                        child: Text(
+                          '${AdminHierarchyService.displayName(doc)} ($id)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
                   ],
                   onChanged: (v) => setSt(() {
-                    selectedL3 = v;
-                    if (v == null) selectedL2 = null;
+                    selectedL3Id = v;
+                    if (v == null) selectedL2Id = null;
                   }),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<models.Document?>(
-                  value: selectedL2,
+                DropdownButtonFormField<String?>(
+                  value: selectedL2Id,
                   decoration: InputDecoration(
                     labelText: 'Level 2 supervisor',
-                    helperText: selectedL3 == null
+                    helperText: selectedL3Id == null
                         ? 'Select a class head first'
                         : 'Supervises the assigned Level 3 admin',
                   ),
                   items: [
-                    const DropdownMenuItem<models.Document?>(
+                    const DropdownMenuItem<String?>(
                       value: null,
                       child: Text('None'),
                     ),
-                    ...l2Admins.map((doc) => DropdownMenuItem(
-                          value: doc,
-                          child: Text(
-                            '${AdminHierarchyService.displayName(doc)} (${AdminHierarchyService.username(doc)})',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        )),
+                    ...l2Admins.map((doc) {
+                      final id = AdminHierarchyService.username(doc) ?? '';
+                      return DropdownMenuItem<String?>(
+                        value: id,
+                        child: Text(
+                          '${AdminHierarchyService.displayName(doc)} ($id)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
                   ],
-                  onChanged: selectedL3 == null
+                  onChanged: selectedL3Id == null
                       ? null
-                      : (v) => setSt(() => selectedL2 = v),
+                      : (v) => setSt(() => selectedL2Id = v),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -781,55 +841,96 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: Colors.grey.shade300,
                 ),
-                onPressed: nameCtrl.text.isNotEmpty &&
-                        codeCtrl.text.isNotEmpty &&
-                        pendingBoundary != null
-                    ? () async {
-                        final headId =
-                            AdminHierarchyService.username(selectedL3);
-                        final headName = selectedL3 != null
-                            ? AdminHierarchyService.displayName(selectedL3!)
-                            : null;
-                        final supId =
-                            AdminHierarchyService.username(selectedL2);
-                        final supName = selectedL2 != null
-                            ? AdminHierarchyService.displayName(selectedL2!)
-                            : null;
-                        final classId = ID.unique();
-                        await AppwriteService.databases.createDocument(
-                          databaseId: '69ecebfb0033cf785741',
-                          collectionId: 'classes',
-                          documentId: classId,
-                          data: {
-                            'className': nameCtrl.text.trim(),
-                            'classCode': codeCtrl.text.trim(),
-                            'adminName': widget.adminName,
-                            'createdBy': widget.adminId,
-                            'studentIds': <String>[],
-                            'boundary': jsonEncode(pendingBoundary),
-                            if (headId != null && headId.isNotEmpty)
-                              'headAdminId': headId,
-                            if (headName != null && headName.isNotEmpty)
-                              'headAdminName': headName,
-                            if (supId != null && supId.isNotEmpty)
-                              'supervisorId': supId,
-                            if (supName != null && supName.isNotEmpty)
-                              'supervisorName': supName,
-                          },
-                        );
-                        await AdminHierarchyService.linkClassStaff(
-                          classDocId: classId,
-                          l1AdminId: widget.adminId,
-                          headAdminId: headId,
-                          headAdminName: headName,
-                          supervisorId: supId,
-                          supervisorName: supName,
-                        );
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        _fetchClasses();
-                      }
-                    : null,
-                child: const Text("Create"),
+                onPressed: saving ||
+                        codeCtrl.text.trim().isEmpty ||
+                        pendingBoundary == null
+                    ? null
+                    : () async {
+                        final code = codeCtrl.text.trim();
+                        final name = nameCtrl.text.trim().isNotEmpty
+                            ? nameCtrl.text.trim()
+                            : code;
+                        final headId = selectedL3Id;
+                        final supId = selectedL2Id;
+                        String? headName;
+                        String? supName;
+                        for (final doc in l3Admins) {
+                          if (AdminHierarchyService.username(doc) == headId) {
+                            headName = AdminHierarchyService.displayName(doc);
+                            break;
+                          }
+                        }
+                        for (final doc in l2Admins) {
+                          if (AdminHierarchyService.username(doc) == supId) {
+                            supName = AdminHierarchyService.displayName(doc);
+                            break;
+                          }
+                        }
+
+                        setSt(() => saving = true);
+                        try {
+                          final classId = ID.unique();
+                          await AppwriteService.databases.createDocument(
+                            databaseId: '69ecebfb0033cf785741',
+                            collectionId: 'classes',
+                            documentId: classId,
+                            data: {
+                              'className': name,
+                              'classCode': code,
+                              'adminName': widget.adminName,
+                              'createdBy': widget.adminId,
+                              'studentIds': <String>[],
+                              'boundary': jsonEncode(pendingBoundary),
+                            },
+                          );
+
+                          await AdminHierarchyService.persistClassAssignments(
+                            classDocId: classId,
+                            classData: {
+                              'boundary': jsonEncode(pendingBoundary),
+                            },
+                            l1AdminId: widget.adminId,
+                            headAdminId: headId,
+                            headAdminName: headName,
+                            supervisorId: supId,
+                            supervisorName: supName,
+                          );
+
+                          if (!ctx.mounted) return;
+                          Navigator.pop(ctx);
+                          await _fetchClasses();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Class "$name" created.'),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Could not create class: $e',
+                                ),
+                                backgroundColor: Colors.red.shade700,
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (ctx.mounted) setSt(() => saving = false);
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text("Create"),
               ),
           ],
         );
@@ -1771,7 +1872,100 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
   String get _classCode =>
       _classData['classCode'] as String? ?? widget.classId;
 
+  bool get _canEditBoundary => widget.adminLevel < 2;
+  bool get _canManageMembers => widget.adminLevel == 3;
+
+  Future<void> _removeStudentFromClass(String username) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Remove from class?',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(
+          'Remove $username from $_className? They can rejoin with the class code.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final ids = List<String>.from(
+      (_classData['studentIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString()),
+    );
+    ids.remove(username);
+
+    await AppwriteService.databases.updateDocument(
+      databaseId: '69ecebfb0033cf785741',
+      collectionId: 'classes',
+      documentId: widget.classId,
+      data: {'studentIds': ids},
+    );
+    if (mounted) {
+      setState(() => _classData['studentIds'] = ids);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$username removed from class.')),
+      );
+    }
+  }
+
+  Future<void> _toggleStudentSuspend(
+      models.Document userDoc, String username) async {
+    final isDisabled = userDoc.data['status'] == 'disabled';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('${isDisabled ? 'Unsuspend' : 'Suspend'} student?',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(
+          isDisabled
+              ? 'Restore login access for $username?'
+              : 'Suspend $username? They will not be able to log in until reactivated.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(isDisabled ? 'Unsuspend' : 'Suspend'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await AppwriteService.databases.updateDocument(
+      databaseId: '69ecebfb0033cf785741',
+      collectionId: 'users',
+      documentId: userDoc.$id,
+      data: {'status': isDisabled ? 'active' : 'disabled'},
+    );
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(isDisabled
+                ? 'Student reactivated.'
+                : 'Student suspended.')),
+      );
+    }
+  }
+
   void _openBoundaryPicker() async {
+    if (!_canEditBoundary) return;
     final _rawBoundary = _classData['boundary'];
     final Map<String, dynamic>? boundary = _rawBoundary is String && _rawBoundary.isNotEmpty
         ? (jsonDecode(_rawBoundary) as Map<String, dynamic>)
@@ -2048,23 +2242,30 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                                 10)),
                                   ),
                                   onPressed: () async {
-                                    final newBoundary = {
+                                    final geo = {
                                       'lat': current.latitude,
                                       'lng': current.longitude,
                                       'radiusMeters': radius,
                                     };
+                                    final assignments =
+                                        AdminHierarchyService.readAssignments(
+                                            _classData);
+                                    final boundaryJson =
+                                        AdminHierarchyService
+                                            .encodeBoundaryWithAssignments(
+                                      geo,
+                                      assignments,
+                                    );
                                     await AppwriteService.databases
                                         .updateDocument(
                                       databaseId: '69ecebfb0033cf785741',
                                       collectionId: 'classes',
                                       documentId: widget.classId,
-                                      data: {
-                                        'boundary': jsonEncode(newBoundary)
-                                      },
+                                      data: {'boundary': boundaryJson},
                                     );
                                     setState(() =>
                                         _classData['boundary'] =
-                                            newBoundary);
+                                            boundaryJson);
                                     if (mounted) {
                                       Navigator.pop(context);
                                       ScaffoldMessenger.of(context)
@@ -2323,71 +2524,71 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
                   children: [
-                    // --- BOUNDARY CARD ---
-                    _sectionCard(
-                      icon: Icons.my_location,
-                      title: "Class Boundary",
-                      trailing: hasBoundary
-                          ? _statusChip("Set", Colors.green)
-                          : _statusChip("Not Set", Colors.orange),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (hasBoundary &&
-                              _classData['boundary'] != null && _classData['boundary'].toString().isNotEmpty) ...[
-                            Builder(builder: (_) {
-                              final rawB = _classData['boundary'];
-                              final bMap = rawB is String
-                                  ? (jsonDecode(rawB) as Map<String, dynamic>)
-                                  : (rawB as Map<String, dynamic>? ?? {});
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Lat: ${(bMap['lat'] as num).toStringAsFixed(5)},  "
-                                    "Lng: ${(bMap['lng'] as num).toStringAsFixed(5)}",
-                                    style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontSize: 12,
-                                        fontFamily: 'Courier'),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    "Radius: ${(bMap['radiusMeters'] as num).toStringAsFixed(0)} m",
-                                    style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontSize: 12),
-                                  ),
-                                ],
-                              );
-                            }),
-                            const SizedBox(height: 12),
-                          ],
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              icon: Icon(hasBoundary
-                                  ? Icons.edit_location_alt
-                                  : Icons.add_location_alt),
-                              label: Text(hasBoundary
-                                  ? "Edit Boundary"
-                                  : "Set Boundary"),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    const Color(0xFF6A8A73),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(10)),
+                    if (_canEditBoundary) ...[
+                      _sectionCard(
+                        icon: Icons.my_location,
+                        title: "Class Boundary",
+                        trailing: hasBoundary
+                            ? _statusChip("Set", Colors.green)
+                            : _statusChip("Not Set", Colors.orange),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (hasBoundary &&
+                                _classData['boundary'] != null &&
+                                _classData['boundary'].toString().isNotEmpty) ...[
+                              Builder(builder: (_) {
+                                final geo = AdminHierarchyService.geoFromBoundary(
+                                    _classData['boundary']);
+                                if (geo['lat'] == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Lat: ${(geo['lat'] as num).toStringAsFixed(5)},  "
+                                      "Lng: ${(geo['lng'] as num).toStringAsFixed(5)}",
+                                      style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 12,
+                                          fontFamily: 'Courier'),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "Radius: ${(geo['radiusMeters'] as num).toStringAsFixed(0)} m",
+                                      style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 12),
+                                    ),
+                                  ],
+                                );
+                              }),
+                              const SizedBox(height: 12),
+                            ],
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                icon: Icon(hasBoundary
+                                    ? Icons.edit_location_alt
+                                    : Icons.add_location_alt),
+                                label: Text(hasBoundary
+                                    ? "Edit Boundary"
+                                    : "Set Boundary"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6A8A73),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: _openBoundaryPicker,
                               ),
-                              onPressed: _openBoundaryPicker,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
+                    ],
 
                     // --- STUDENTS CARD ---
                     Container(
@@ -2437,68 +2638,12 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                       style: TextStyle(
                                           color: Colors.grey,
                                           fontSize: 13))
-                                  : FutureBuilder<models.DocumentList>(
-                                      future: AppwriteService.databases
-                                          .listDocuments(
-                                        databaseId: '69ecebfb0033cf785741',
-                                        collectionId: 'users',
-                                        queries: [
-                                          Query.equal('\$id',
-                                              studentIds.cast<String>())
-                                        ],
-                                      ),
-                                      builder: (context, snap) {
-                                        if (!snap.hasData) {
-                                          return const Center(
-                                              child:
-                                                  CircularProgressIndicator(
-                                                      color: Color(
-                                                          0xFF6A8A73)));
-                                        }
-                                        return Container(
-                                          constraints:
-                                              const BoxConstraints(
-                                                  maxHeight: 300),
-                                          child: ListView(
-                                            shrinkWrap: true,
-                                            children: snap
-                                                .data!.documents
-                                                .map((s) {
-                                              final sd = s.data;
-                                              return ListTile(
-                                                contentPadding:
-                                                    EdgeInsets.zero,
-                                                dense: true,
-                                                leading:
-                                                    const CircleAvatar(
-                                                  radius: 18,
-                                                  backgroundColor:
-                                                      Color(0xFFF1F4F2),
-                                                  child: Icon(
-                                                      Icons.person,
-                                                      color: Color(
-                                                          0xFF6A8A73),
-                                                      size: 16),
-                                                ),
-                                                title: Text(
-                                                    sd['name'] as String? ??
-                                                        "Unknown",
-                                                    style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight
-                                                                .w600,
-                                                        fontSize: 13)),
-                                                subtitle: Text(
-                                                    "ID: ${sd['username'] as String? ?? s.$id}",
-                                                    style:
-                                                        const TextStyle(
-                                                            fontSize:
-                                                                11)),
-                                              );
-                                            }).toList(),
-                                          ),
-                                        );
-                                      },
+                                  : _ClassMembersList(
+                                      studentIds:
+                                          studentIds.cast<String>(),
+                                      canManage: _canManageMembers,
+                                      onRemove: _removeStudentFromClass,
+                                      onToggleSuspend: _toggleStudentSuspend,
                                     ),
                             ),
                           ],
@@ -2576,6 +2721,150 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
               fontSize: 11,
               color: color,
               fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+// =============================================================================
+// _ClassMembersList — student roster with optional L3 management actions
+// =============================================================================
+class _ClassMembersList extends StatelessWidget {
+  final List<String> studentIds;
+  final bool canManage;
+  final Future<void> Function(String username) onRemove;
+  final Future<void> Function(models.Document userDoc, String username)
+      onToggleSuspend;
+
+  const _ClassMembersList({
+    required this.studentIds,
+    required this.canManage,
+    required this.onRemove,
+    required this.onToggleSuspend,
+  });
+
+  Future<List<models.Document>> _loadStudents() async {
+    final docs = <models.Document>[];
+    for (final id in studentIds) {
+      final user = await AdminHierarchyService.findUserByUsername(id);
+      if (user != null) docs.add(user);
+    }
+    docs.sort((a, b) {
+      final na = a.data['name'] as String? ?? '';
+      final nb = b.data['name'] as String? ?? '';
+      return na.compareTo(nb);
+    });
+    return docs;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<models.Document>>(
+      future: _loadStudents(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF6A8A73)),
+          );
+        }
+        if (!snap.hasData || snap.data!.isEmpty) {
+          return const Text(
+            'No students enrolled yet.',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          );
+        }
+
+        return Container(
+          constraints: const BoxConstraints(maxHeight: 360),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: snap.data!.length,
+            separatorBuilder: (_, __) => Divider(
+              height: 1,
+              color: Colors.grey.shade200,
+            ),
+            itemBuilder: (context, i) {
+              final s = snap.data![i];
+              final sd = s.data;
+              final username = sd['username'] as String? ?? '';
+              final isSuspended = sd['status'] == 'disabled';
+
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: isSuspended
+                      ? Colors.red.shade50
+                      : const Color(0xFFF1F4F2),
+                  child: Icon(
+                    Icons.person,
+                    color: isSuspended ? Colors.red : const Color(0xFF6A8A73),
+                    size: 16,
+                  ),
+                ),
+                title: Text(
+                  sd['name'] as String? ?? 'Unknown',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: isSuspended ? Colors.grey : Colors.black,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID: $username${isSuspended ? ' • Suspended' : ''}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isSuspended ? Colors.red.shade400 : null,
+                  ),
+                ),
+                trailing: canManage
+                    ? PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, size: 20),
+                        onSelected: (value) {
+                          if (value == 'remove') {
+                            onRemove(username);
+                          } else if (value == 'suspend') {
+                            onToggleSuspend(s, username);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: 'suspend',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSuspended
+                                      ? Icons.check_circle_outline
+                                      : Icons.block,
+                                  size: 18,
+                                  color: isSuspended
+                                      ? Colors.green
+                                      : Colors.orange,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(isSuspended ? 'Unsuspend' : 'Suspend'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'remove',
+                            child: Row(
+                              children: [
+                                Icon(Icons.person_remove,
+                                    size: 18, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text('Remove from class'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : null,
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -2795,8 +3084,7 @@ class _PeriodsManagementSectionState
                   style: TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 15)),
               const Spacer(),
-              if (widget.adminLevel < 3)
-                ElevatedButton.icon(
+              ElevatedButton.icon(
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text("Add"),
                   style: ElevatedButton.styleFrom(

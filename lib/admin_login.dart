@@ -9,7 +9,11 @@ import 'app_theme.dart';
 import 'services/appwrite_service.dart'; // Make sure this path is correct for your project
 
 class AdminLoginPage extends StatefulWidget {
-  const AdminLoginPage({super.key});
+  /// The level this login portal is restricted to (1, 2, or 3).
+  /// Credentials belonging to a different level will be rejected.
+  final int requiredLevel;
+
+  const AdminLoginPage({super.key, required this.requiredLevel});
 
   @override
   State<AdminLoginPage> createState() => _AdminLoginPageState();
@@ -131,6 +135,19 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
         return;
       }
 
+      // ── Level enforcement ──────────────────────────────────────────
+      final accountLevel = data['level'] is int ? data['level'] as int : 1;
+      if (accountLevel != widget.requiredLevel) {
+        _dismissAndShowError(
+          "These credentials belong to a Level $accountLevel account. "
+          "Please use the Level $accountLevel portal.",
+        );
+        _generateCaptcha();
+        captchaController.clear();
+        return;
+      }
+      // ──────────────────────────────────────────────────────────────
+
       // Check account status
       if (data['status'] == 'disabled') {
         _dismissAndShowError("Your admin account has been disabled. Please contact the Dean.");
@@ -154,7 +171,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       Navigator.of(context).pop();
 
       final adminName = data['name'] ?? adminId;
-      final adminLevel = data['level'] is int ? data['level'] as int : 1;
+      final adminLevel = accountLevel; // already validated above
       Navigator.pushReplacement(context, MaterialPageRoute(
           builder: (_) => AdminHomePage(
               adminName: adminName,
@@ -202,22 +219,38 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                         fontSize: 18,
                         letterSpacing: 1.2),
                   ),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                        (route) => false,
-                      );
-                    },
-                    icon: const Icon(Icons.person_outline, color: Colors.white70, size: 18),
-                    label: const Text(
-                      "USER",
-                      style: TextStyle(
-                          color: Colors.white70, 
-                          fontWeight: FontWeight.bold, 
-                          fontSize: 12),
-                    ),
+                  Row(
+                    children: [
+                      // Level badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppTheme.kGreen.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: AppTheme.kGreen.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          "LEVEL ${widget.requiredLevel}",
+                          style: const TextStyle(
+                            color: AppTheme.kGreen,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close,
+                            color: Colors.white70, size: 20),
+                        tooltip: "Back to level select",
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -229,13 +262,13 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   Text(
-                    "Administrator Access",
+                  Text(
+                    "Level ${widget.requiredLevel} Portal",
                     style: AppTheme.headingWhite,
                   ),
                   const SizedBox(height: 8),
-                   Text(
-                    "Please authenticate to manage the system.",
+                  Text(
+                    "Only Level ${widget.requiredLevel} credentials are accepted here.",
                     style: AppTheme.subheadingGrey,
                   ),
                 ],

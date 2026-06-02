@@ -44,7 +44,7 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
 
     setState(() => _loading = true);
     try {
-      // Logic: Request goes to person at Level X + 1
+      // Logic: Request goes to person at Level X - 1 (lower number = higher rank)
       await LeaveService.submitRequest(
         userId: widget.userId,
         userName: widget.userName,
@@ -52,7 +52,7 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
         startDate: _startDate,
         endDate: _endDate,
         reason: _reasonCtrl.text.trim(),
-        approverLevel: widget.userLevel + 1,
+        approverLevel: widget.userLevel - 1,
       );
 
       if (mounted) {

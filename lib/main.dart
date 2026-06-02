@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'register_page.dart';
-import 'admin_login.dart';
+import 'admin_level_select_page.dart';
 import 'dean_login.dart';
 import 'app_theme.dart';
 import 'package:appwrite/appwrite.dart';
@@ -311,7 +311,7 @@ final data = response.documents.first.data;
                   TextButton.icon(
                     onPressed: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const AdminLoginPage()),
+                      MaterialPageRoute(builder: (_) => const AdminLevelSelectPage()),
                     ),
                     icon: const Icon(
                       Icons.admin_panel_settings_outlined,

@@ -10,6 +10,7 @@ import 'main.dart';
 import 'app_theme.dart';
 import 'profile_page.dart';
 import 'services/appwrite_service.dart';
+import 'distribution/user_qr_page.dart';
 
 class HomePage extends StatefulWidget {
   final String name;
@@ -162,6 +163,19 @@ class _HomePageState extends State<HomePage> {
           },
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_2_rounded),
+            tooltip: "My QR Code",
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserQrPage(
+                  username: widget.username,
+                  name: widget.name,
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.account_circle_outlined),
             tooltip: "Profile",

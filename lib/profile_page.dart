@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
@@ -23,8 +23,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _updateProfile() async {
-    if (_usernameController.text.isEmpty || _newPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+    if (_newPasswordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a new password")));
       return;
     }
     setState(() => _isLoading = true);
@@ -33,7 +33,7 @@ class _ProfilePageState extends State<ProfilePage> {
       final result = await AppwriteService.databases.listDocuments(
         databaseId: '69ecebfb0033cf785741',
         collectionId: 'users',
-        queries: [Query.equal('username', _usernameController.text.trim())],
+        queries: [Query.equal('username', widget.username)],
       );
 
       if (result.documents.isEmpty) {
@@ -94,7 +94,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 32),
                     TextField(
                       controller: _usernameController,
-                      decoration: AppTheme.inputDecoration("Confirm Username", Icons.person_outline),
+                      readOnly: true,
+                      decoration: AppTheme.inputDecoration("Username", Icons.person_outline).copyWith(
+                        fillColor: Colors.grey.withValues(alpha: 0.1),
+                        filled: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextField(

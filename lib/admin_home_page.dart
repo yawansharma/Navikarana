@@ -1964,14 +1964,115 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     }
   }
 
+  Future<void> _acceptStudent(Map<String, dynamic> student) async {
+    try {
+      final username = student['username'] as String?;
+      if (username == null || username.isEmpty) return;
+
+      // 1. Get the current boundary
+      final boundaryData = AdminHierarchyService.parseBoundaryRaw(_classData['boundary']);
+      
+      // 2. Remove the student from pendingStudents
+      final List<dynamic> pendingStudents = List.from(boundaryData['pendingStudents'] ?? []);
+      pendingStudents.removeWhere((s) => s['username'] == username);
+      boundaryData['pendingStudents'] = pendingStudents;
+
+      // 3. Add the student to studentIds
+      final List<String> studentIds = List<String>.from(
+        (_classData['studentIds'] as List<dynamic>? ?? [])
+            .map((e) => e.toString()),
+      );
+      if (!studentIds.contains(username)) {
+        studentIds.add(username);
+      }
+
+      // 4. Update the Appwrite document
+      await AppwriteService.databases.updateDocument(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'classes',
+        documentId: widget.classId,
+        data: {
+          'boundary': jsonEncode(boundaryData),
+          'studentIds': studentIds,
+        },
+      );
+
+      // 5. Update local state
+      if (mounted) {
+        setState(() {
+          _classData['boundary'] = jsonEncode(boundaryData);
+          _classData['studentIds'] = studentIds;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Accepted ${student['name'] ?? username}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectStudent(Map<String, dynamic> student) async {
+    try {
+      final username = student['username'] as String?;
+      if (username == null || username.isEmpty) return;
+
+      // 1. Get the current boundary
+      final boundaryData = AdminHierarchyService.parseBoundaryRaw(_classData['boundary']);
+      
+      // 2. Remove from pendingStudents and record in rejectedStudents
+      final List<dynamic> pendingStudents = List.from(boundaryData['pendingStudents'] ?? []);
+      pendingStudents.removeWhere((s) => s['username'] == username);
+      boundaryData['pendingStudents'] = pendingStudents;
+
+      final List<dynamic> rejectedStudents = List.from(boundaryData['rejectedStudents'] ?? []);
+      if (!rejectedStudents.any((s) => s['username'] == username)) {
+        rejectedStudents.add({
+          'username': username,
+          'name': student['name'] ?? username,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+      }
+      boundaryData['rejectedStudents'] = rejectedStudents;
+
+      // 3. Update the Appwrite document
+      await AppwriteService.databases.updateDocument(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'classes',
+        documentId: widget.classId,
+        data: {
+          'boundary': jsonEncode(boundaryData),
+        },
+      );
+
+      // 4. Update local state
+      if (mounted) {
+        setState(() {
+          _classData['boundary'] = jsonEncode(boundaryData);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Declined ${student['name'] ?? username}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+
   void _openBoundaryPicker() async {
     if (!_canEditBoundary) return;
-    final _rawBoundary = _classData['boundary'];
-    final Map<String, dynamic>? boundary = _rawBoundary is String && _rawBoundary.isNotEmpty
-        ? (jsonDecode(_rawBoundary) as Map<String, dynamic>)
-        : (_rawBoundary is Map<String, dynamic> ? _rawBoundary : null);
+    final boundary = AdminHierarchyService.parseBoundaryRaw(_classData['boundary']);
     LatLng pos;
-    if (boundary != null) {
+    if (boundary.containsKey('lat') && boundary['lat'] != null) {
       pos = LatLng((boundary['lat'] as num).toDouble(),
           (boundary['lng'] as num).toDouble());
     } else {
@@ -2589,6 +2690,51 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                       ),
                       const SizedBox(height: 16),
                     ],
+
+                    Builder(
+                      builder: (context) {
+                        final boundaryData = AdminHierarchyService.parseBoundaryRaw(_classData['boundary']);
+                        final List<dynamic> pendingStudents = boundaryData['pendingStudents'] ?? [];
+                        
+                        if (pendingStudents.isEmpty) return const SizedBox.shrink();
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _sectionCard(
+                            icon: Icons.person_add_alt_1_outlined,
+                            title: "Pending Applications",
+                            trailing: _statusChip("${pendingStudents.length}", Colors.orange),
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: pendingStudents.length,
+                              separatorBuilder: (_, __) => const Divider(),
+                              itemBuilder: (ctx, i) {
+                                final s = Map<String, dynamic>.from(pendingStudents[i] as Map);
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(s['name'] ?? s['username']),
+                                  subtitle: Text(s['username'], style: const TextStyle(fontSize: 12)),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.check_circle, color: Colors.green),
+                                        onPressed: () => _acceptStudent(s),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.cancel, color: Colors.red),
+                                        onPressed: () => _rejectStudent(s),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        );
+                      }
+                    ),
 
                     // --- STUDENTS CARD ---
                     Container(

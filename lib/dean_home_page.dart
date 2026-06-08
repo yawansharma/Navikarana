@@ -392,7 +392,14 @@ class _AdminListTabState extends State<_AdminListTab> {
   RealtimeSubscription? _sub;
 
   final List<String> departments = [
-    'CSE', 'ISE', 'ECE', 'ME', 'CE', 'Basic Sciences', 'General Admin'
+    "School of Computing (SoC)",
+    "School of Electrical & Electronics Engineering (SEEE)",
+    "School of Mechanical Engineering (SoME)",
+    "School of Civil Engineering (SoCE)",
+    "School of Chemical & Biotechnology (SCBT)",
+    "School of Law",
+    "School of Management (SoM)",
+    "School of Arts, Sciences, Humanities & Education (SASHE)"
   ];
 
   @override
@@ -400,7 +407,7 @@ class _AdminListTabState extends State<_AdminListTab> {
     super.initState();
     _fetchAdmins();
     _sub = AppwriteService.realtime
-        .subscribe(['databases.main_db.collections.users.documents']);
+        .subscribe(['databases.69ecebfb0033cf785741.collections.users.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchAdmins();
     });
@@ -489,6 +496,7 @@ class _AdminListTabState extends State<_AdminListTab> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: selectedDept,
                 decoration: InputDecoration(
                     labelText: 'Department',
@@ -496,7 +504,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                         borderRadius: BorderRadius.circular(12))),
                 items: departments
                     .map((d) =>
-                        DropdownMenuItem(value: d, child: Text(d)))
+                        DropdownMenuItem(value: d, child: Text(d, overflow: TextOverflow.ellipsis)))
                     .toList(),
                 onChanged: (v) =>
                     setSheetState(() => selectedDept = v!),

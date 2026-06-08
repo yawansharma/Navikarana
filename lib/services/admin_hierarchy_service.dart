@@ -19,8 +19,7 @@ class ClassAssignments {
     this.supervisorName,
   });
 
-  bool get hasSupervisor =>
-      supervisorId != null && supervisorId!.isNotEmpty;
+  bool get hasSupervisor => supervisorId != null && supervisorId!.isNotEmpty;
   bool get hasHead => headAdminId != null && headAdminId!.isNotEmpty;
 }
 
@@ -134,7 +133,9 @@ class AdminHierarchyService {
     return result.documents.first;
   }
 
-  static Future<List<models.Document>> _listAllClasses({int limit = 200}) async {
+  static Future<List<models.Document>> _listAllClasses({
+    int limit = 200,
+  }) async {
     final result = await AppwriteService.databases.listDocuments(
       databaseId: databaseId,
       collectionId: classesCollection,
@@ -144,7 +145,8 @@ class AdminHierarchyService {
   }
 
   static Future<List<models.Document>> listL3UnderSupervisor(
-      String supervisorId) async {
+    String supervisorId,
+  ) async {
     final found = <String, models.Document>{};
 
     final l3Admins = await listAdminsByLevel(3);
@@ -183,17 +185,15 @@ class AdminHierarchyService {
   }
 
   static Future<({String? id, String? name})> resolveReportingL1(
-      String l2AdminId) async {
+    String l2AdminId,
+  ) async {
     for (final classDoc in await _listAllClasses()) {
       final a = readAssignments(classDoc.data);
       if (a.supervisorId == l2AdminId) {
         final l1Id = classDoc.data['createdBy'] as String?;
         if (l1Id != null && l1Id.isNotEmpty) {
           final l1 = await findUserByUsername(l1Id);
-          return (
-            id: l1Id,
-            name: l1 != null ? displayName(l1) : l1Id,
-          );
+          return (id: l1Id, name: l1 != null ? displayName(l1) : l1Id);
         }
       }
     }
@@ -236,11 +236,13 @@ class AdminHierarchyService {
           continue;
         }
         try {
-          docs.add(await AppwriteService.databases.getDocument(
-            databaseId: databaseId,
-            collectionId: classesCollection,
-            documentId: classId.toString(),
-          ));
+          docs.add(
+            await AppwriteService.databases.getDocument(
+              databaseId: databaseId,
+              collectionId: classesCollection,
+              documentId: classId.toString(),
+            ),
+          );
         } catch (_) {}
       }
 
@@ -297,12 +299,15 @@ class AdminHierarchyService {
   }
 
   static Future<void> _removeManagedClass(
-      String l3Username, String classDocId) async {
+    String l3Username,
+    String classDocId,
+  ) async {
     final l3 = await findUserByUsername(l3Username);
     if (l3 == null) return;
     final managed = List<String>.from(
-      (l3.data['managedClasses'] as List<dynamic>? ?? [])
-          .map((e) => e.toString()),
+      (l3.data['managedClasses'] as List<dynamic>? ?? []).map(
+        (e) => e.toString(),
+      ),
     );
     if (!managed.contains(classDocId)) return;
     managed.remove(classDocId);
@@ -354,8 +359,9 @@ class AdminHierarchyService {
       final l3 = await findUserByUsername(headAdminId);
       if (l3 != null) {
         final managed = List<String>.from(
-          (l3.data['managedClasses'] as List<dynamic>? ?? [])
-              .map((e) => e.toString()),
+          (l3.data['managedClasses'] as List<dynamic>? ?? []).map(
+            (e) => e.toString(),
+          ),
         );
         if (!managed.contains(classDocId)) managed.add(classDocId);
 
@@ -387,8 +393,9 @@ class AdminHierarchyService {
       headAdminId: headAdminId?.isNotEmpty == true ? headAdminId : null,
       headAdminName: headAdminName?.isNotEmpty == true ? headAdminName : null,
       supervisorId: supervisorId?.isNotEmpty == true ? supervisorId : null,
-      supervisorName:
-          supervisorName?.isNotEmpty == true ? supervisorName : null,
+      supervisorName: supervisorName?.isNotEmpty == true
+          ? supervisorName
+          : null,
     );
 
     final geo = geoFromBoundary(classData['boundary']);
@@ -403,8 +410,7 @@ class AdminHierarchyService {
 
     await patchClassAssignments(classDocId: classDocId, assignments: next);
 
-    if (prev.headAdminId != null &&
-        prev.headAdminId != next.headAdminId) {
+    if (prev.headAdminId != null && prev.headAdminId != next.headAdminId) {
       await _removeManagedClass(prev.headAdminId!, classDocId);
     }
 
@@ -417,9 +423,7 @@ class AdminHierarchyService {
 
   static String displayName(models.Document doc) {
     final data = doc.data;
-    return data['name'] as String? ??
-        data['username'] as String? ??
-        'Admin';
+    return data['name'] as String? ?? data['username'] as String? ?? 'Admin';
   }
 
   static String? username(models.Document? doc) =>

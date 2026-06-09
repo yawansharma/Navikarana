@@ -1,4 +1,4 @@
-  // SETUP: Create these collections in Appwrite Console (database 69ecebfb0033cf785741)
+// SETUP: Create these collections in Appwrite Console (database 69ecebfb0033cf785741)
 //
 // distribution_events:
 //   title(String), description(String), scheduledDate(String), location(String),
@@ -24,14 +24,26 @@ import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'appwrite_service.dart';
 
-enum ScanStatus { success, alreadyIssued, notInList, eventNotActive, notAuthorized, revoked }
+enum ScanStatus {
+  success,
+  alreadyIssued,
+  notInList,
+  eventNotActive,
+  notAuthorized,
+  revoked,
+}
 
 class ScanResult {
   final ScanStatus status;
   final String? userName;
   final String? issuedAt;
   final String? issuedBy;
-  const ScanResult({required this.status, required this.userName, this.issuedAt, this.issuedBy});
+  const ScanResult({
+    required this.status,
+    required this.userName,
+    this.issuedAt,
+    this.issuedBy,
+  });
 }
 
 class DistributionService {
@@ -75,6 +87,18 @@ class DistributionService {
       databaseId: _db,
       collectionId: _events,
       queries: [Query.orderDesc('createdAt'), Query.limit(100)],
+    );
+  }
+
+  static Future<models.DocumentList> getEventsByCreator(String createdBy) {
+    return AppwriteService.databases.listDocuments(
+      databaseId: _db,
+      collectionId: _events,
+      queries: [
+        Query.equal('createdBy', createdBy),
+        Query.orderDesc('createdAt'),
+        Query.limit(100),
+      ],
     );
   }
 
@@ -139,7 +163,9 @@ class DistributionService {
       databaseId: _db,
       collectionId: _events,
       documentId: eventId,
-      data: {'totalRecipients': (event.data['totalRecipients'] as int? ?? 0) + 1},
+      data: {
+        'totalRecipients': (event.data['totalRecipients'] as int? ?? 0) + 1,
+      },
     );
   }
 
@@ -151,7 +177,10 @@ class DistributionService {
     );
   }
 
-  static Future<void> removeRecipient(String recipientDocId, String eventId) async {
+  static Future<void> removeRecipient(
+    String recipientDocId,
+    String eventId,
+  ) async {
     await AppwriteService.databases.deleteDocument(
       databaseId: _db,
       collectionId: _recipients,
@@ -180,7 +209,10 @@ class DistributionService {
     final existing = await AppwriteService.databases.listDocuments(
       databaseId: _db,
       collectionId: _assignments,
-      queries: [Query.equal('eventId', eventId), Query.equal('adminId', adminId)],
+      queries: [
+        Query.equal('eventId', eventId),
+        Query.equal('adminId', adminId),
+      ],
     );
     if (existing.documents.isNotEmpty) {
       await AppwriteService.databases.updateDocument(
@@ -227,7 +259,9 @@ class DistributionService {
   // Admin: Get assigned active events
   // ---------------------------------------------------------------------------
 
-  static Future<List<models.Document>> getAdminActiveEvents(String adminId) async {
+  static Future<List<models.Document>> getAdminActiveEvents(
+    String adminId,
+  ) async {
     final assignments = await AppwriteService.databases.listDocuments(
       databaseId: _db,
       collectionId: _assignments,
@@ -256,7 +290,10 @@ class DistributionService {
   }) async {
     final event = await getEventById(eventId);
     if (event.data['status'] != 'active') {
-      return const ScanResult(status: ScanStatus.eventNotActive, userName: null);
+      return const ScanResult(
+        status: ScanStatus.eventNotActive,
+        userName: null,
+      );
     }
 
     final adminCheck = await AppwriteService.databases.listDocuments(
@@ -275,7 +312,10 @@ class DistributionService {
     final recipientQuery = await AppwriteService.databases.listDocuments(
       databaseId: _db,
       collectionId: _recipients,
-      queries: [Query.equal('eventId', eventId), Query.equal('userId', scannedUserId)],
+      queries: [
+        Query.equal('eventId', eventId),
+        Query.equal('userId', scannedUserId),
+      ],
     );
 
     if (recipientQuery.documents.isEmpty) {
@@ -323,7 +363,11 @@ class DistributionService {
   }
 
   static Future<void> _writeScanLog(
-      String eventId, String userId, String adminId, String action) {
+    String eventId,
+    String userId,
+    String adminId,
+    String action,
+  ) {
     return AppwriteService.databases.createDocument(
       databaseId: _db,
       collectionId: _scanLogs,
@@ -382,7 +426,8 @@ class DistributionService {
   // QR encode/decode
   // ---------------------------------------------------------------------------
 
-  static String encodeQr(String username) => jsonEncode({'u': username, 'v': 1});
+  static String encodeQr(String username) =>
+      jsonEncode({'u': username, 'v': 1});
 
   static String? decodeQr(String raw) {
     try {

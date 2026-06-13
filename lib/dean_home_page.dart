@@ -8,6 +8,7 @@ import 'admin_home_page.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
 import 'distribution/dean_distribution_tab.dart';
+import 'components/user_avatar.dart';
 
 // ---------------------------------------------------------------------------
 // THEME CONSTANTS FOR DEAN
@@ -665,10 +666,13 @@ class _AdminListTabState extends State<_AdminListTab> {
             children: [
               Row(
                 children: [
-                  const CircleAvatar(
-                      radius: 24,
-                      backgroundColor: kDeanDark,
-                      child: Icon(Icons.person, color: kDeanGold)),
+                  UserAvatar(
+                    profilePictureId: data['profilePictureId'] as String?,
+                    fallbackName: data['name'] as String? ?? '?',
+                    radius: 24,
+                    backgroundColor: kDeanDark,
+                    foregroundColor: kDeanGold,
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(

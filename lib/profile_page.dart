@@ -3,9 +3,13 @@ import 'package:appwrite/appwrite.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
 
+import 'components/user_avatar.dart';
+
 class ProfilePage extends StatefulWidget {
   final String username;
-  const ProfilePage({super.key, required this.username});
+  final String name;
+  final String? profilePictureId;
+  const ProfilePage({super.key, required this.username, required this.name, this.profilePictureId});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -79,11 +83,21 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   children: [
                     AppTheme.sheetHandle,
-                    const Icon(Icons.shield_outlined, size: 60, color: AppTheme.kGreen),
+                    UserAvatar(
+                      profilePictureId: widget.profilePictureId,
+                      fallbackName: widget.name,
+                      radius: 50,
+                      backgroundColor: AppTheme.kGreen.withValues(alpha: 0.1),
+                      foregroundColor: AppTheme.kGreen,
+                    ),
                     const SizedBox(height: 16),
                     Text(
-                      widget.username,
+                      widget.name,
                       style: AppTheme.sectionTitle.copyWith(fontSize: 22),
+                    ),
+                    Text(
+                      widget.username,
+                      style: AppTheme.subheadingGrey.copyWith(fontSize: 14),
                     ),
                     const SizedBox(height: 4),
                     Text(

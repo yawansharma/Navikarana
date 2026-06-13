@@ -76,7 +76,7 @@ class L1OrganizationPanel extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           if (bySupervisor.isNotEmpty) ...[
-            Text('By Level 2 supervisor',
+            Text('By Head of Department (Level 2)',
                 style: GoogleFonts.poppins(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -86,7 +86,7 @@ class L1OrganizationPanel extends StatelessWidget {
           ],
           if (unassigned.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text('No Level 2 supervisor',
+            Text('No Head of Department assigned',
                 style: GoogleFonts.poppins(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -150,7 +150,7 @@ class L1OrganizationPanel extends StatelessWidget {
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13)),
                 if (head != null && head.isNotEmpty)
-                  Text('Head: $head',
+                  Text('TL: $head',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
               ],
@@ -238,7 +238,7 @@ class _L2TeamTabState extends State<L2TeamTab> {
         children: [
           _reportingCard(),
           const SizedBox(height: 20),
-          Text('Level 3 admins under you',
+          Text('Team Leaders (Level 3) under you',
               style: GoogleFonts.poppins(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -306,8 +306,8 @@ class _L2TeamTabState extends State<L2TeamTab> {
               size: 48, color: Colors.grey.shade400),
           const SizedBox(height: 12),
           Text(
-            'No Level 3 admins under your supervision yet.\n'
-            'Ask your Level 1 admin to assign you on a class.',
+            'No Team Leaders under your supervision yet.\n'
+            'Ask your Admin (Level 1) to assign you on a class.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
@@ -391,9 +391,9 @@ class ClassAssignmentChips extends StatelessWidget {
         runSpacing: 4,
         children: [
           if (head != null && head.isNotEmpty)
-            _chip(Icons.person_pin_outlined, 'Head: $head', const Color(0xFF7A6A8A)),
+            _chip(Icons.person_pin_outlined, 'TL: $head', const Color(0xFF7A6A8A)),
           if (sup != null && sup.isNotEmpty)
-            _chip(Icons.supervisor_account, 'L2: $sup', const Color(0xFF4E7A8A)),
+            _chip(Icons.supervisor_account, 'HoD: $sup', const Color(0xFF4E7A8A)),
         ],
       ),
     );
@@ -533,7 +533,7 @@ Future<void> showClassStaffAssignmentSheet({
                 DropdownButtonFormField<String?>(
                   value: selectedL3Id,
                   decoration: const InputDecoration(
-                    labelText: 'Class head (Level 3)',
+                    labelText: 'Team Leader (Level 3)',
                     border: OutlineInputBorder(),
                   ),
                   items: [
@@ -561,10 +561,10 @@ Future<void> showClassStaffAssignmentSheet({
                 DropdownButtonFormField<String?>(
                   value: selectedL2Id,
                   decoration: InputDecoration(
-                    labelText: 'Level 2 supervisor',
+                    labelText: 'Head of Department (Level 2)',
                     border: const OutlineInputBorder(),
                     helperText: selectedL3Id == null
-                        ? 'Select a class head first'
+                        ? 'Select a Team Leader first'
                         : null,
                   ),
                   items: [

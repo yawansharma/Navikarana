@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
@@ -118,8 +118,21 @@ class _RegisterPageState extends State<RegisterPage> {
       if (photo != null) setState(() => _localPhoto = File(photo.path));
       return;
     }
+    
+    // Windows fallback: open the camera capture helper in the browser
     final htmlPath = '${Directory.current.path}\\windows\\runner\\resources\\camera.html';
     await launchUrl(Uri.file(htmlPath), mode: LaunchMode.externalApplication);
+    
+    if (!mounted) return;
+    _showSnackBar("Camera helper opened. Capture, save the photo, and select it in the dialog.");
+    
+    // Immediately open file selection to let the user select the captured file
+    final XFile? photo = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+    );
+    if (photo != null) {
+      setState(() => _localPhoto = File(photo.path));
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -166,19 +179,26 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  Future<void> _registerUserInAppwrite() async {
+  Future<void> _registerUserInAppwrite(String? profilePicId) async {
+  final data = {
+    'name': nameController.text.trim(),
+    'username': uniqueCodeController.text.trim(),
+    'password': passwordController.text.trim(),
+    'department': _selectedSchool,
+    'latitude': latitude,
+    'longitude': longitude,
+    'status': 'pending',
+    'role': 'student',
+  };
+  if (profilePicId != null) {
+    data['profilePictureId'] = profilePicId;
+  }
+
   await AppwriteService.databases.createDocument(
     databaseId: '69ecebfb0033cf785741',
     collectionId: 'users',
     documentId: ID.unique(),
-    data: {
-      'name': nameController.text.trim(),
-      'username': uniqueCodeController.text.trim(),
-      'password': passwordController.text.trim(),
-      'department': _selectedSchool,
-      'latitude': latitude,
-      'longitude': longitude,
-    },
+    data: data,
   );
 }
 
@@ -204,9 +224,80 @@ class _RegisterPageState extends State<RegisterPage> {
         _showSnackBar(faceError);
         return;
       }
-      await _registerUserInAppwrite();
+
+      // Upload profile picture to Appwrite Storage Bucket
+      String? picId;
+      try {
+        final bytes = await _localPhoto!.readAsBytes();
+        final extension = _localPhoto!.path.split('.').last.toLowerCase();
+        final filename = 'profile_${uniqueCodeController.text.trim()}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+        final uploadedFile = await AppwriteService.storage.createFile(
+          bucketId: '6a2bd4280020cd413c57',
+          fileId: ID.unique(),
+          file: InputFile.fromBytes(
+            bytes: bytes,
+            filename: filename,
+          ),
+        );
+        picId = uploadedFile.$id;
+      } catch (e) {
+        debugPrint("Image upload to storage failed: $e");
+      }
+
+      await _registerUserInAppwrite(picId);
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(name: nameController.text.trim(), username: uniqueCodeController.text.trim())));
+      
+      // Show pending validation dialog instead of navigating to HomePage directly
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 48),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                "Registration Successful",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Your account details have been sent to your department's administrator for validation.\n\nYou will be able to log in once they approve your request.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop(); // Close dialog
+                    Navigator.of(context).pop(); // Go back to login page
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.kGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text("Return to Login", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) _showSnackBar("Registration failed: $e");
     } finally {
@@ -292,172 +383,208 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.kDark,
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).pop())),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text("Go ahead and set up\nyour account", style: AppTheme.headingWhite.copyWith(fontSize: 28, height: 1.2)),
-              const SizedBox(height: 10),
-              Text("Create your account to enjoy the best managing experience", style: AppTheme.subheadingGrey)
-            ])),
-          Expanded(
-            child: RisingSheet(
-              child: Container(
-                width: double.infinity,
-                decoration: AppTheme.bottomSheet,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(children: [
-                    AppTheme.sheetHandle,
-                    _sectionTitle("BASIC INFORMATION"),
-                    TextFormField(
-                      controller: nameController, 
-                      textInputAction: TextInputAction.next,
-                      decoration: AppTheme.inputDecoration("Full Name", Icons.person_outline)
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: uniqueCodeController, 
-                      textInputAction: TextInputAction.next,
-                      decoration: AppTheme.inputDecoration("Unique ID", Icons.badge_outlined)
-                    ),
-                    const SizedBox(height: 16),
-
-                    GestureDetector(
-                      onTap: _showSchoolPicker,
-                      child: AbsorbPointer(
-                        child: TextFormField(
-                          decoration: AppTheme.inputDecoration(
-                            _selectedSchool ?? "Select School", 
-                            Icons.school_outlined, 
-                            isDropdown: true
-                          ),
-                          style: GoogleFonts.poppins(color: _selectedSchool == null ? Colors.grey : Colors.black, fontSize: 14),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
+                ),
+                child: IntrinsicHeight(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Go ahead and set up\nyour account",
+                              style: AppTheme.headingWhite.copyWith(fontSize: 28, height: 1.2),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Create your account to enjoy the best managing experience",
+                              style: AppTheme.subheadingGrey,
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    
-                    _sectionTitle("IDENTITY CHECK"),
-                    _actionTile(
-                      icon: Icons.camera_alt_outlined,
-                      label: _localPhoto != null ? "Photo Captured" : "Add Profile Photo",
-                      onTap: _pickPhoto,
-                      isSet: _localPhoto != null,
-                    ),
-                    if (_localPhoto != null) ...[
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.file(_localPhoto!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                      Expanded(
+                        child: RisingSheet(
+                          child: Container(
+                            width: double.infinity,
+                            decoration: AppTheme.bottomSheet,
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              children: [
+                                AppTheme.sheetHandle,
+                                _sectionTitle("BASIC INFORMATION"),
+                                TextFormField(
+                                  controller: nameController, 
+                                  textInputAction: TextInputAction.next,
+                                  decoration: AppTheme.inputDecoration("Full Name", Icons.person_outline),
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: uniqueCodeController, 
+                                  textInputAction: TextInputAction.next,
+                                  decoration: AppTheme.inputDecoration("Unique ID", Icons.badge_outlined),
+                                ),
+                                const SizedBox(height: 16),
+
+                                GestureDetector(
+                                  onTap: _showSchoolPicker,
+                                  child: AbsorbPointer(
+                                    child: TextFormField(
+                                      decoration: AppTheme.inputDecoration(
+                                        _selectedSchool ?? "Select School", 
+                                        Icons.school_outlined, 
+                                        isDropdown: true,
+                                      ),
+                                      style: GoogleFonts.poppins(
+                                        color: _selectedSchool == null ? Colors.grey : Colors.black,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                
+                                _sectionTitle("IDENTITY CHECK"),
+                                _actionTile(
+                                  icon: Icons.camera_alt_outlined,
+                                  label: _localPhoto != null ? "Photo Captured" : "Add Profile Photo",
+                                  onTap: _pickPhoto,
+                                  isSet: _localPhoto != null,
+                                ),
+                                if (_localPhoto != null) ...[
+                                  const SizedBox(height: 12),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Image.file(_localPhoto!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                _actionTile(
+                                  icon: Icons.location_on_outlined,
+                                  label: latitude != null ? "Location Verified" : "Capture Location",
+                                  onTap: _getCurrentLocation,
+                                  isLoading: _fetchingLocation,
+                                  isSet: latitude != null,
+                                ),
+
+                                _sectionTitle("SECURITY"),
+                                TextFormField(
+                                  controller: passwordController, 
+                                  obscureText: _isObscure, 
+                                  decoration: AppTheme.inputDecoration(
+                                    "Password", 
+                                    Icons.lock_outline,
+                                    suffix: IconButton(
+                                      icon: Icon(_isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey, size: 20),
+                                      onPressed: () => setState(() => _isObscure = !_isObscure),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: confirmPasswordController, 
+                                  obscureText: _isConfirmObscure, 
+                                  decoration: AppTheme.inputDecoration(
+                                    "Confirm Password", 
+                                    Icons.lock_reset,
+                                    suffix: IconButton(
+                                      icon: Icon(_isConfirmObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey, size: 20),
+                                      onPressed: () => setState(() => _isConfirmObscure = !_isConfirmObscure),
+                                    ),
+                                  ),
+                                ),
+                                
+                                const SizedBox(height: 40),
+                                SizedBox(
+                                  width: double.infinity, 
+                                  height: 55, 
+                                  child: ElevatedButton(
+                                    onPressed: _registeringFace ? null : _onRegisterPressed, 
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.kGreen,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                    ),
+                                    child: _registeringFace 
+                                      ? const CircularProgressIndicator(color: Colors.white) 
+                                      : const Text("Register Account", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  ),
+                                ),
+                                
+                                const SizedBox(height: 50),
+                                Center(
+                                  child: RepaintBoundary(
+                                    child: Opacity(
+                                      opacity: 0.6,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(0xFF6A8A73).withValues(alpha: 0.15),
+                                                  blurRadius: 20,
+                                                  spreadRadius: 2,
+                                                ),
+                                              ],
+                                            ),
+                                            child: ColorFiltered(
+                                              colorFilter: ColorFilter.mode(
+                                                const Color(0xFF6A8A73).withValues(alpha: 0.1),
+                                                BlendMode.srcATop,
+                                              ),
+                                              child: Image.asset(
+                                                'assets/upasthiti.png',
+                                                width: 90,
+                                                fit: BoxFit.contain,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            "POWERED BY upasthiti",
+                                            style: TextStyle(
+                                              color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 1.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    _actionTile(
-                      icon: Icons.location_on_outlined,
-                      label: latitude != null ? "Location Verified" : "Capture Location",
-                      onTap: _getCurrentLocation,
-                      isLoading: _fetchingLocation,
-                      isSet: latitude != null,
-                    ),
-
-                    _sectionTitle("SECURITY"),
-                    TextFormField(
-                      controller: passwordController, 
-                      obscureText: _isObscure, 
-                      decoration: AppTheme.inputDecoration(
-                        "Password", 
-                        Icons.lock_outline,
-                        suffix: IconButton(
-                          icon: Icon(_isObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey, size: 20),
-                          onPressed: () => setState(() => _isObscure = !_isObscure),
-                        ),
-                      )
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: confirmPasswordController, 
-                      obscureText: _isConfirmObscure, 
-                      decoration: AppTheme.inputDecoration(
-                        "Confirm Password", 
-                        Icons.lock_reset,
-                        suffix: IconButton(
-                          icon: Icon(_isConfirmObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey, size: 20),
-                          onPressed: () => setState(() => _isConfirmObscure = !_isConfirmObscure),
-                        ),
-                      )
-                    ),
-                    
-                    const SizedBox(height: 40),
-                    SizedBox(
-                      width: double.infinity, 
-                      height: 55, 
-                      child: ElevatedButton(
-                        onPressed: _registeringFace ? null : _onRegisterPressed, 
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.kGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                        child: _registeringFace 
-                          ? const CircularProgressIndicator(color: Colors.white) 
-                          : const Text("Register Account", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white))
-                      )
-                    ),
-                    
-                    // ---------------------------------------------------------------------------
-                    // PROFESSIONAL LOGO FOOTER WITH PNG TINT & GLOW
-                    // ---------------------------------------------------------------------------
-                    const SizedBox(height: 50),
-                    Center(
-                      child: RepaintBoundary(
-                        child: Opacity(
-                          opacity: 0.6,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF6A8A73).withValues(alpha: 0.15),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                                child: ColorFiltered(
-                                  colorFilter: ColorFilter.mode(
-                                    const Color(0xFF6A8A73).withValues(alpha: 0.1),
-                                    BlendMode.srcATop,
-                                  ),
-                                  child: Image.asset(
-                                    'assets/upasthiti.png',
-                                    width: 90,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "POWERED BY upasthiti",
-                                style: TextStyle(
-                                  color: const Color(0xFF6A8A73).withValues(alpha: 0.8),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ]),
+                  ),
                 ),
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

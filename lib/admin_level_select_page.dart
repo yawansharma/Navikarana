@@ -110,7 +110,7 @@ class AdminLevelSelectPage extends StatelessWidget {
                         // Level Cards
                         _LevelCard(
                           level: 1,
-                          title: "Level 1 Admin",
+                          title: "Admin",
                           subtitle: "Institution-level control",
                           description:
                               "Full institutional oversight, approve Level 2 leave requests, and cross-department reporting.",
@@ -120,7 +120,7 @@ class AdminLevelSelectPage extends StatelessWidget {
                         const SizedBox(height: 16),
                         _LevelCard(
                           level: 2,
-                          title: "Level 2 Admin",
+                          title: "Head of Department",
                           subtitle: "Department-level oversight",
                           description:
                               "Oversee multiple classes, approve Level 3 leave requests, and manage department analytics.",
@@ -130,7 +130,7 @@ class AdminLevelSelectPage extends StatelessWidget {
                         const SizedBox(height: 16),
                         _LevelCard(
                           level: 3,
-                          title: "Level 3 Admin",
+                          title: "Team Leader",
                           subtitle: "Class-level management",
                           description:
                               "Manage individual classes, run attendance periods, and review your class logs.",

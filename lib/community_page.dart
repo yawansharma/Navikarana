@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:file_picker/file_picker.dart';
@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/appwrite_service.dart';
+import 'components/user_avatar.dart';
 
 // =============================================================================
 // CommunityPage â€” two tabs: Channel + Direct Messages
@@ -370,8 +371,10 @@ class _AdminDmListTab extends StatelessWidget {
             ),
             builder: (context, snap) {
               String name = studentId;
+              String? profilePic;
               if (snap.hasData) {
                 name = snap.data!.data['name'] as String? ?? studentId;
+                profilePic = snap.data!.data['profilePictureId'] as String?;
               }
               return Container(
                 margin: const EdgeInsets.symmetric(
@@ -389,17 +392,12 @@ class _AdminDmListTab extends StatelessWidget {
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 4),
-                  leading: CircleAvatar(
+                  leading: UserAvatar(
+                    profilePictureId: profilePic,
+                    fallbackName: name,
                     radius: 22,
-                    backgroundColor:
-                        AppTheme.kGreen.withValues(alpha: 0.1),
-                    child: Text(
-                      name[0].toUpperCase(),
-                      style: GoogleFonts.poppins(
-                          color: AppTheme.kGreen,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18),
-                    ),
+                    backgroundColor: AppTheme.kGreen.withValues(alpha: 0.1),
+                    foregroundColor: AppTheme.kGreen,
                   ),
                   title: Text(name,
                       style: GoogleFonts.poppins(

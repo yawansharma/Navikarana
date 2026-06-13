@@ -12,6 +12,7 @@ import 'profile_page.dart';
 import 'services/appwrite_service.dart';
 import 'distribution/user_qr_page.dart';
 import 'services/admin_hierarchy_service.dart';
+import 'components/user_avatar.dart';
 
 class HomePage extends StatefulWidget {
   final String name;
@@ -28,7 +29,9 @@ class _HomePageState extends State<HomePage> {
   List<models.Document> _departmentClasses = [];
   List<models.Document> _pendingClasses = [];
   List<models.Document> _rejectedClasses = [];
+  List<models.Document> _invitedClasses = [];
   String? _studentDepartment;
+  String? _profilePictureId;
   bool _loading = true;
   bool _initialized = false;
   RealtimeSubscription? _sub;
@@ -68,9 +71,16 @@ class _HomePageState extends State<HomePage> {
       List<models.Document> deptClasses = [];
       List<models.Document> pendingClasses = [];
       List<models.Document> rejectedClasses = [];
+      List<models.Document> invitedClasses = [];
 
       if (userResult.documents.isNotEmpty) {
-        dept = userResult.documents.first.data['department'] as String?;
+        final data = userResult.documents.first.data;
+        dept = data['department'] as String?;
+        if (mounted) {
+          setState(() {
+            _profilePictureId = data['profilePictureId'] as String?;
+          });
+        }
       }
 
       // Fetch all classes to find pending/rejected requests and dept explore list
@@ -106,11 +116,15 @@ class _HomePageState extends State<HomePage> {
           final boundary = AdminHierarchyService.parseBoundaryRaw(doc.data['boundary']);
           final List<dynamic> pending = List.from(boundary['pendingStudents'] ?? []);
           final List<dynamic> rejected = List.from(boundary['rejectedStudents'] ?? []);
+          final List<dynamic> invited = List.from(boundary['invitedStudents'] ?? []);
 
           final isPending = pending.any((s) => s['username'] == widget.username);
           final isRejected = rejected.any((s) => s['username'] == widget.username);
+          final isInvited = invited.contains(widget.username);
 
-          if (isPending) {
+          if (isInvited) {
+            invitedClasses.add(doc);
+          } else if (isPending) {
             pendingClasses.add(doc);
           } else if (isRejected) {
             rejectedClasses.add(doc);
@@ -139,6 +153,7 @@ class _HomePageState extends State<HomePage> {
           _departmentClasses = deptClasses;
           _pendingClasses = pendingClasses;
           _rejectedClasses = rejectedClasses;
+          _invitedClasses = invitedClasses;
           _loading = false;
           _initialized = true;
         });
@@ -356,6 +371,66 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _acceptInvite(String classId, Map<String, dynamic> boundary, List<dynamic> currentStudentIds) async {
+    try {
+      final List<dynamic> invited = List.from(boundary['invitedStudents'] ?? []);
+      invited.removeWhere((s) => s == widget.username);
+      boundary['invitedStudents'] = invited;
+      
+      final List<dynamic> newStudents = List.from(currentStudentIds);
+      if (!newStudents.contains(widget.username)) {
+        newStudents.add(widget.username);
+      }
+
+      await AppwriteService.databases.updateDocument(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'classes',
+        documentId: classId,
+        data: {
+            'boundary': jsonEncode(boundary),
+            'studentIds': newStudents,
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invitation accepted!')),
+        );
+        _fetchClasses();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _declineInvite(String classId, Map<String, dynamic> boundary) async {
+    try {
+      final List<dynamic> invited = List.from(boundary['invitedStudents'] ?? []);
+      invited.removeWhere((s) => s == widget.username);
+      boundary['invitedStudents'] = invited;
+
+      await AppwriteService.databases.updateDocument(
+        databaseId: '69ecebfb0033cf785741',
+        collectionId: 'classes',
+        documentId: classId,
+        data: {'boundary': jsonEncode(boundary)},
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invitation declined.')),
+        );
+        _fetchClasses();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -389,12 +464,18 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.account_circle_outlined),
+            icon: _profilePictureId != null
+                ? UserAvatar(profilePictureId: _profilePictureId, fallbackName: widget.name, radius: 14)
+                : const Icon(Icons.account_circle_outlined),
             tooltip: "Profile",
             onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => ProfilePage(username: widget.username))),
+                    builder: (_) => ProfilePage(
+                          username: widget.username,
+                          name: widget.name,
+                          profilePictureId: _profilePictureId,
+                        ))),
           ),
           const SizedBox(width: 8),
         ],
@@ -440,6 +521,7 @@ class _HomePageState extends State<HomePage> {
     final bool hasAnything = _classes.isNotEmpty ||
         _pendingClasses.isNotEmpty ||
         _rejectedClasses.isNotEmpty ||
+        _invitedClasses.isNotEmpty ||
         _departmentClasses.isNotEmpty;
 
     if (!hasAnything) {
@@ -538,6 +620,32 @@ class _HomePageState extends State<HomePage> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
               child: _buildNoClassesBanner(context),
+            ),
+          ),
+        ],
+
+        // ── Invitations ───────────────────────────────────────────────────
+        if (_invitedClasses.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+              child: Row(
+                children: [
+                  Text("Invitations", style: AppTheme.sectionTitle),
+                  const SizedBox(width: 8),
+                  _requestCountChip(
+                      "${_invitedClasses.length} new", Colors.purple),
+                ],
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _buildInviteTile(context, _invitedClasses[index]),
+                childCount: _invitedClasses.length,
+              ),
             ),
           ),
         ],
@@ -852,6 +960,88 @@ class _HomePageState extends State<HomePage> {
                           child:
                               const Text("Re-apply", style: TextStyle(fontSize: 12)),
                         ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInviteTile(BuildContext context, models.Document doc) {
+    final data = doc.data;
+    final boundary = AdminHierarchyService.parseBoundaryRaw(data['boundary']);
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              Container(width: 5, color: Colors.purple),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              data['className'] ?? "Unknown Class",
+                              style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold, fontSize: 15),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Admin Invite",
+                              style: AppTheme.labelSmall.copyWith(fontSize: 11, color: Colors.purple),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => _declineInvite(doc.$id, boundary),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                        child: const Text("Decline", style: TextStyle(fontSize: 12)),
+                      ),
+                      const SizedBox(width: 4),
+                      ElevatedButton(
+                        onPressed: () => _acceptInvite(doc.$id, boundary, data['studentIds'] ?? []),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.kGreen,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text("Accept", style: TextStyle(fontSize: 12)),
+                      ),
                     ],
                   ),
                 ),

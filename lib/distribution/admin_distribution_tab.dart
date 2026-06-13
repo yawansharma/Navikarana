@@ -9,6 +9,7 @@ import 'package:excel/excel.dart' hide Border;
 import '../services/distribution_service.dart';
 import '../services/appwrite_service.dart';
 import 'admin_scan_page.dart';
+import '../components/user_avatar.dart';
 
 // Admin theme constants
 const Color _kGreen = Color(0xFF6A8A73);
@@ -1262,19 +1263,12 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                           );
                           return ListTile(
                             dense: true,
-                            leading: CircleAvatar(
+                            leading: UserAvatar(
+                              profilePictureId: u['profilePictureId'] as String?,
+                              fallbackName: u['name'] as String? ?? 'Admin',
                               radius: 16,
                               backgroundColor: _kGreen.withValues(alpha: 0.1),
-                              child: Text(
-                                (u['name'] as String? ?? 'A')
-                                    .substring(0, 1)
-                                    .toUpperCase(),
-                                style: const TextStyle(
-                                  color: _kGreen,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
+                              foregroundColor: _kGreen,
                             ),
                             title: Text(
                               u['name'] as String? ?? '—',

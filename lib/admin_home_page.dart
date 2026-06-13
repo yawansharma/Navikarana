@@ -19,6 +19,10 @@ import 'leave_management_page.dart';
 import 'distribution/admin_distribution_tab.dart';
 import 'services/admin_hierarchy_service.dart';
 import 'admin_hierarchy_views.dart';
+import 'admin_approval_requests_page.dart';
+import 'admin_org_chart_page.dart';
+import 'admin_student_directory_page.dart';
+import 'components/user_avatar.dart';
 
 // =============================================================================
 // AdminHomePage â€” 3-tab shell: Classes | Analytics | Settings
@@ -342,8 +346,70 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   List<Widget> _buildAppBarActions() {
+    List<Widget> actions = [];
+
+    // Org Chart: All Admins
+    actions.add(
+      IconButton(
+        icon: const Icon(Icons.account_tree_outlined, color: Colors.white),
+        tooltip: "Organizational Chart",
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminOrgChartPage(
+                currentAdminId: widget.adminId,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    // Student Directory: Level 2 and Level 3 Admins
+    if (widget.adminLevel == 2 || widget.adminLevel == 3) {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.folder_shared_outlined, color: Colors.white),
+          tooltip: "Student Directory",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdminStudentDirectoryPage(
+                  adminDepartment: _adminDepartment,
+                  adminId: widget.adminId,
+                  classes: _classes,
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // Level 2 Admin: Registration Approval Requests
+    if (widget.adminLevel == 2) {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.person_add_alt_1_outlined, color: Colors.white),
+          tooltip: "Pending Registrations",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdminApprovalRequestsPage(
+                  adminDepartment: _adminDepartment,
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
     if (_currentIndex == 1) {
-      return [
+      actions.addAll([
         if (_dateRange != null)
           IconButton(
             icon: const Icon(Icons.close, color: Colors.redAccent),
@@ -371,9 +437,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
             if (picked != null) setState(() => _dateRange = picked);
           },
         ),
-      ];
+      ]);
     }
-    return [];
+    return actions;
   }
 
   Widget _buildCurrentTab() {
@@ -2937,16 +3003,12 @@ class _ClassMembersList extends StatelessWidget {
               return ListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                leading: CircleAvatar(
+                leading: UserAvatar(
+                  profilePictureId: sd['profilePictureId'] as String?,
+                  fallbackName: sd['name'] as String? ?? 'Unknown',
                   radius: 18,
-                  backgroundColor: isSuspended
-                      ? Colors.red.shade50
-                      : const Color(0xFFF1F4F2),
-                  child: Icon(
-                    Icons.person,
-                    color: isSuspended ? Colors.red : const Color(0xFF6A8A73),
-                    size: 16,
-                  ),
+                  backgroundColor: isSuspended ? Colors.red.shade50 : const Color(0xFFF1F4F2),
+                  foregroundColor: isSuspended ? Colors.red : const Color(0xFF6A8A73),
                 ),
                 title: Text(
                   sd['name'] as String? ?? 'Unknown',

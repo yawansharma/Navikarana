@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
 import 'services/admin_hierarchy_service.dart';
@@ -285,7 +285,7 @@ class _L2TeamTabState extends State<L2TeamTab> {
                 fontWeight: FontWeight.bold),
           ),
           if (_reportsToL1Id != null && _reportsToL1Id!.isNotEmpty)
-            Text('Level 1 • $_reportsToL1Id',
+            Text('Level 1 â€¢ $_reportsToL1Id',
                 style: GoogleFonts.poppins(
                     color: Colors.white60, fontSize: 12)),
         ],
@@ -320,7 +320,7 @@ class _L2TeamTabState extends State<L2TeamTab> {
     final data = doc.data;
     final name = AdminHierarchyService.displayName(doc);
     final username = data['username'] as String? ?? '';
-    final dept = data['department'] as String? ?? '—';
+    final dept = data['department'] as String? ?? 'â€”';
     final managed = (data['managedClasses'] as List?)?.length ?? 0;
 
     return Card(
@@ -349,7 +349,7 @@ class _L2TeamTabState extends State<L2TeamTab> {
                   Text(name,
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 15)),
-                  Text('$username • $dept',
+                  Text('$username â€¢ $dept',
                       style: TextStyle(
                           fontSize: 12, color: Colors.grey.shade600)),
                   const SizedBox(height: 4),
@@ -677,3 +677,5 @@ Future<void> showClassStaffAssignmentSheet({
     ),
   );
 }
+
+

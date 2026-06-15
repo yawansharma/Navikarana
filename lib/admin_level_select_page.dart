@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'app_theme.dart';
 import 'admin_login.dart';
 
@@ -14,7 +14,7 @@ class AdminLevelSelectPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header ──────────────────────────────────────────────
+            // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Row(
@@ -37,7 +37,7 @@ class AdminLevelSelectPage extends StatelessWidget {
               ),
             ),
 
-            // ── Title ────────────────────────────────────────────────
+            // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 24),
               child: Column(
@@ -61,7 +61,7 @@ class AdminLevelSelectPage extends StatelessWidget {
             ),
             const SizedBox(height: 30),
 
-            // ── Rising Sheet with Level Cards ────────────────────────
+            // â”€â”€ Rising Sheet with Level Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Expanded(
               child: RisingSheet(
                 child: Container(
@@ -137,6 +137,75 @@ class AdminLevelSelectPage extends StatelessWidget {
                           icon: Icons.class_outlined,
                           onTap: () => _goToLogin(context, 3),
                         ),
+                        const SizedBox(height: 16),
+                        _LevelCard(
+                          level: 0,
+                          title: "Office Admin",
+                          subtitle: "Operational management",
+                          description:
+                              "Manage student biometrics, view per-student attendance records, and generate attendance reports.",
+                          icon: Icons.manage_accounts_outlined,
+                          customBadge: "OA",
+                          customAccent: const Color(0xFF8A6A6A),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AdminLoginPage(isOfficeAdmin: true),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+                        _LevelCard(
+                          level: 0,
+                          title: "Event Admin",
+                          subtitle: "Event management",
+                          description:
+                              "Exclusively host and manage institution events, assign QR scanners, and track event attendance.",
+                          icon: Icons.event_outlined,
+                          customBadge: "EA",
+                          customAccent: const Color(0xFF3D6B8A),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AdminLoginPage(specialRole: 'eventAdmin'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _LevelCard(
+                          level: 0,
+                          title: "HR Admin",
+                          subtitle: "Human resources management",
+                          description:
+                              "Handle leave requests, approve student registrations, and generate attendance reports for HR purposes.",
+                          icon: Icons.people_alt_outlined,
+                          customBadge: "HR",
+                          customAccent: const Color(0xFF8A7A2A),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AdminLoginPage(specialRole: 'hrAdmin'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _LevelCard(
+                          level: 0,
+                          title: "Security Admin",
+                          subtitle: "Security & access control",
+                          description:
+                              "Monitor audit logs, detect geofence anomalies, and manage account access for all users.",
+                          icon: Icons.security_outlined,
+                          customBadge: "SA",
+                          customAccent: const Color(0xFF8A2A2A),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AdminLoginPage(specialRole: 'securityAdmin'),
+                            ),
+                          ),
+                        ),
 
                         const SizedBox(height: 40),
 
@@ -195,9 +264,9 @@ class AdminLevelSelectPage extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Level Card Widget
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _LevelCard extends StatelessWidget {
   final int level;
   final String title;
@@ -205,6 +274,8 @@ class _LevelCard extends StatelessWidget {
   final String description;
   final IconData icon;
   final VoidCallback onTap;
+  final String? customBadge;
+  final Color? customAccent;
 
   const _LevelCard({
     required this.level,
@@ -213,17 +284,20 @@ class _LevelCard extends StatelessWidget {
     required this.description,
     required this.icon,
     required this.onTap,
+    this.customBadge,
+    this.customAccent,
   });
 
   // Each level gets a slightly different accent shade
   Color get _accentColor {
+    if (customAccent != null) return customAccent!;
     switch (level) {
       case 1:
-        return const Color(0xFF7A6A8A); // Muted violet — top admin
+        return const Color(0xFF7A6A8A);
       case 2:
-        return const Color(0xFF4E7A8A); // Teal-blue — department
+        return const Color(0xFF4E7A8A);
       case 3:
-        return const Color(0xFF6A8A73); // Sage green — class level
+        return const Color(0xFF6A8A73);
       default:
         return AppTheme.kGreen;
     }
@@ -288,7 +362,7 @@ class _LevelCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          "L$level",
+                          customBadge ?? "L$level",
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -329,3 +403,4 @@ class _LevelCard extends StatelessWidget {
     );
   }
 }
+

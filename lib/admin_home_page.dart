@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -25,7 +25,7 @@ import 'admin_student_directory_page.dart';
 import 'components/user_avatar.dart';
 
 // =============================================================================
-// AdminHomePage â€” 3-tab shell: Classes | Analytics | Settings
+// AdminHomePage Ã¢â‚¬â€ 3-tab shell: Classes | Analytics | Settings
 // =============================================================================
 class AdminHomePage extends StatefulWidget {
   final String adminName;
@@ -88,7 +88,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   Future<void> _fetchAdminProfile() async {
     try {
       final res = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'users',
         queries: [
           Query.equal('username', widget.adminId),
@@ -102,7 +102,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         });
       }
     } catch (_) {
-      // ignore – department filter is best-effort
+      // ignore â€“ department filter is best-effort
     }
   }
 
@@ -147,7 +147,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       final List<models.Document> allLogs = [];
       if (widget.adminLevel == 1) {
         final result = await AppwriteService.databases.listDocuments(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: '6a2c10dc000d5e50f314',
           collectionId: 'attendance_logs',
           queries: [
             Query.equal('adminId', widget.adminId),
@@ -160,7 +160,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         for (final classId in classIds) {
           try {
             final result = await AppwriteService.databases.listDocuments(
-              databaseId: '69ecebfb0033cf785741',
+              databaseId: '6a2c10dc000d5e50f314',
               collectionId: 'attendance_logs',
               queries: [
                 Query.equal('classId', classId),
@@ -446,7 +446,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     final tabs = [
       _buildClassesTab(),
       _buildGlobalLogsTab(),
-      AdminDistributionTab(adminId: widget.adminId, adminName: widget.adminName),
+      AdminDistributionTab(adminId: widget.adminId, adminName: widget.adminName, canHostEvents: false),
       _buildMoreTab(),
     ];
     final bool goingRight = _currentIndex > _prevIndex;
@@ -477,7 +477,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // ===========================================================================
-  // TAB 0 â€” CLASSES
+  // TAB 0 Ã¢â‚¬â€ CLASSES
   // ===========================================================================
   Widget _buildClassesTab() {
     if (widget.adminLevel == 2) {
@@ -712,7 +712,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
             adminsLoadStarted = true;
             if (_adminDepartment == null ||
                 _adminDepartment!.trim().isEmpty) {
-              // No department – treat as no matching admins
+              // No department â€“ treat as no matching admins
               setSt(() {
                 l3Admins = [];
                 l2Admins = [];
@@ -776,7 +776,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   value: selectedL3Id,
                   decoration: const InputDecoration(
                     labelText: 'Class head (Level 3 admin)',
-                    helperText: 'Optional — manages this class',
+                    helperText: 'Optional â€” manages this class',
                   ),
                   items: [
                     const DropdownMenuItem<String?>(
@@ -871,7 +871,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       Expanded(
                         child: Text(
                           pendingBoundary != null
-                              ? "Boundary set â€” ${(pendingBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
+                              ? "Boundary set Ã¢â‚¬â€ ${(pendingBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
                               : "Set Boundary (required)",
                           style: TextStyle(
                             fontSize: 13,
@@ -937,7 +937,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         try {
                           final classId = ID.unique();
                           await AppwriteService.databases.createDocument(
-                            databaseId: '69ecebfb0033cf785741',
+                            databaseId: '6a2c10dc000d5e50f314',
                             collectionId: 'classes',
                             documentId: classId,
                             data: {
@@ -1205,7 +1205,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // ===========================================================================
-  // TAB 1 â€” GLOBAL LOGS
+  // TAB 1 Ã¢â‚¬â€ GLOBAL LOGS
   // ===========================================================================
   Widget _buildGlobalLogsTab() {
     if (_logsLoading) {
@@ -1276,7 +1276,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     return Column(
       children: [
-        // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
           child: Row(
@@ -1355,11 +1355,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
         ),
 
-        // â”€â”€ Class filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Class filter chips Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         _buildClassFilterChips(),
         const SizedBox(height: 8),
 
-        // â”€â”€ Log list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Log list Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         Expanded(
           child: logs.isEmpty
               ? const Center(
@@ -1443,7 +1443,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     if (!confirm) return;
     for (final doc in toDelete) {
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'attendance_logs',
         documentId: doc.$id,
         data: {'isHiddenFromAdmin': true},
@@ -1471,7 +1471,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       if (!confirm) return;
       for (final doc in logs) {
         await AppwriteService.databases.updateDocument(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: '6a2c10dc000d5e50f314',
           collectionId: 'attendance_logs',
           documentId: doc.$id,
           data: {'isHiddenFromAdmin': true},
@@ -1536,7 +1536,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     if (!confirm) return;
                     for (final doc in byDay[day]!) {
                       await AppwriteService.databases.updateDocument(
-                        databaseId: '69ecebfb0033cf785741',
+                        databaseId: '6a2c10dc000d5e50f314',
                         collectionId: 'attendance_logs',
                         documentId: doc.$id,
                         data: {'isHiddenFromAdmin': true},
@@ -1633,7 +1633,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     return FutureBuilder<models.Document>(
       future: AppwriteService.databases.getDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'users',
         documentId: userId,
       ),
@@ -1751,7 +1751,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     // Fetch all non-hidden logs for this admin
     final logsSnapshot = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('createdBy', widget.adminId),
@@ -1795,7 +1795,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // ===========================================================================
-  // TAB 2 â€” MORE / SETTINGS
+  // TAB 2 Ã¢â‚¬â€ MORE / SETTINGS
   // ===========================================================================
   Widget _buildMoreTab() {
     return ListView(
@@ -1972,7 +1972,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     ids.remove(username);
 
     await AppwriteService.databases.updateDocument(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'classes',
       documentId: widget.classId,
       data: {'studentIds': ids},
@@ -2014,7 +2014,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     if (confirmed != true || !mounted) return;
 
     await AppwriteService.databases.updateDocument(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'users',
       documentId: userDoc.$id,
       data: {'status': isDisabled ? 'active' : 'disabled'},
@@ -2054,7 +2054,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
       // 4. Update the Appwrite document
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: widget.classId,
         data: {
@@ -2107,7 +2107,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
       // 3. Update the Appwrite document
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: widget.classId,
         data: {
@@ -2425,7 +2425,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                     );
                                     await AppwriteService.databases
                                         .updateDocument(
-                                      databaseId: '69ecebfb0033cf785741',
+                                      databaseId: '6a2c10dc000d5e50f314',
                                       collectionId: 'classes',
                                       documentId: widget.classId,
                                       data: {'boundary': boundaryJson},
@@ -2492,7 +2492,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete all periods for this class
     final periodsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'periods',
       queries: [
         Query.equal('classId', widget.classId),
@@ -2501,7 +2501,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     );
     for (final doc in periodsSnap.documents) {
       await AppwriteService.databases.deleteDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'periods',
         documentId: doc.$id,
       );
@@ -2509,7 +2509,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete all attendance logs for this class
     final logsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('classId', widget.classId),
@@ -2518,7 +2518,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     );
     for (final doc in logsSnap.documents) {
       await AppwriteService.databases.deleteDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'attendance_logs',
         documentId: doc.$id,
       );
@@ -2526,7 +2526,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete the class document
     await AppwriteService.databases.deleteDocument(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'classes',
       documentId: widget.classId,
     );
@@ -2544,7 +2544,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
       await Permission.manageExternalStorage.request();
     }
     final logsSnapshot = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('classId', widget.classId),
@@ -2938,7 +2938,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 }
 
 // =============================================================================
-// _ClassMembersList — student roster with optional L3 management actions
+// _ClassMembersList â€” student roster with optional L3 management actions
 // =============================================================================
 class _ClassMembersList extends StatelessWidget {
   final List<String> studentIds;
@@ -3019,7 +3019,7 @@ class _ClassMembersList extends StatelessWidget {
                   ),
                 ),
                 subtitle: Text(
-                  'ID: $username${isSuspended ? ' • Suspended' : ''}',
+                  'ID: $username${isSuspended ? ' â€¢ Suspended' : ''}',
                   style: TextStyle(
                     fontSize: 11,
                     color: isSuspended ? Colors.red.shade400 : null,
@@ -3078,7 +3078,7 @@ class _ClassMembersList extends StatelessWidget {
 }
 
 // =============================================================================
-// _PeriodsManagementSection â€” already on Appwrite, preserved as-is
+// _PeriodsManagementSection Ã¢â‚¬â€ already on Appwrite, preserved as-is
 // =============================================================================
 class _PeriodsManagementSection extends StatefulWidget {
   final String classId;
@@ -3127,19 +3127,19 @@ class _PeriodsManagementSectionState
 
     if (confirm == true) {
       final logsSnap = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'attendance_logs',
         queries: [Query.equal('periodId', pId)],
       );
       for (final doc in logsSnap.documents) {
         await AppwriteService.databases.deleteDocument(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: '6a2c10dc000d5e50f314',
           collectionId: 'attendance_logs',
           documentId: doc.$id,
         );
       }
       await AppwriteService.databases.deleteDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'periods',
         documentId: pId,
       );
@@ -3217,7 +3217,7 @@ class _PeriodsManagementSectionState
     }
 
     final periodsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'periods',
       queries: [Query.equal('classId', widget.classId)],
     );
@@ -3247,7 +3247,7 @@ class _PeriodsManagementSectionState
 
     final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
     await AppwriteService.databases.createDocument(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: '6a2c10dc000d5e50f314',
       collectionId: 'periods',
       documentId: ID.unique(),
       data: {
@@ -3311,7 +3311,7 @@ class _PeriodsManagementSectionState
           const SizedBox(height: 14),
           FutureBuilder<models.DocumentList>(
             future: AppwriteService.databases.listDocuments(
-              databaseId: '69ecebfb0033cf785741',
+              databaseId: '6a2c10dc000d5e50f314',
               collectionId: 'periods',
               queries: [
                 Query.equal('classId', widget.classId),
@@ -3433,7 +3433,7 @@ class _PeriodsManagementSectionState
 }
 
 // =============================================================================
-// PeriodAttendancePage â€” already on Appwrite, preserved as-is
+// PeriodAttendancePage Ã¢â‚¬â€ already on Appwrite, preserved as-is
 // =============================================================================
 class PeriodAttendancePage extends StatefulWidget {
   final String classId;
@@ -3476,7 +3476,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
       String studentId, String? logDocId, String status) async {
     if (logDocId != null) {
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'attendance_logs',
         documentId: logDocId,
         data: {
@@ -3486,7 +3486,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
       );
     } else {
       await AppwriteService.databases.createDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'attendance_logs',
         documentId: ID.unique(),
         data: {
@@ -3612,7 +3612,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
         ),
         body: FutureBuilder<models.DocumentList>(
           future: AppwriteService.databases.listDocuments(
-            databaseId: '69ecebfb0033cf785741',
+            databaseId: '6a2c10dc000d5e50f314',
             collectionId: 'attendance_logs',
             queries: [Query.equal('periodId', widget.periodId)],
           ),
@@ -3648,7 +3648,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
 
             return TabBarView(
               children: [
-                // â”€â”€ Reported â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // Ã¢â€â‚¬Ã¢â€â‚¬ Reported Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
                 reported.isEmpty
                     ? const Center(
                         child: Text(
@@ -3682,7 +3682,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
                           return FutureBuilder<models.Document>(
                             future: AppwriteService.databases
                                 .getDocument(
-                              databaseId: '69ecebfb0033cf785741',
+                              databaseId: '6a2c10dc000d5e50f314',
                               collectionId: 'users',
                               documentId: studentId,
                             ),
@@ -3785,7 +3785,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
                         },
                       ),
 
-                // â”€â”€ Not Reported â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // Ã¢â€â‚¬Ã¢â€â‚¬ Not Reported Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
                 notReported.isEmpty
                     ? const Center(
                         child: Text("All students have reported.",
@@ -3799,7 +3799,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
                           return FutureBuilder<models.Document>(
                             future: AppwriteService.databases
                                 .getDocument(
-                              databaseId: '69ecebfb0033cf785741',
+                              databaseId: '6a2c10dc000d5e50f314',
                               collectionId: 'users',
                               documentId: studentId,
                             ),
@@ -3914,3 +3914,5 @@ class _StatusBtn extends StatelessWidget {
     );
   }
 }
+
+

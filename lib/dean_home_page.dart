@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:google_fonts/google_fonts.dart';
@@ -323,7 +323,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
 
       statusNotifier.value = "Migrating classes...";
       final classDocs = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         queries: [Query.limit(5000)],
       );
@@ -332,7 +332,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
         if (data['createdBy'] == null ||
             data['createdBy'].toString().isEmpty) {
           await AppwriteService.databases.updateDocument(
-            databaseId: '69ecebfb0033cf785741',
+            databaseId: '6a2c10dc000d5e50f314',
             collectionId: 'classes',
             documentId: doc.$id,
             data: {'createdBy': 'dean_master', 'adminName': 'Master Dean'},
@@ -343,7 +343,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
 
       statusNotifier.value = "Migrating attendance logs...";
       final logDocs = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'attendance_logs',
         queries: [Query.limit(5000)],
       );
@@ -352,7 +352,7 @@ class _DeanHomePageState extends State<DeanHomePage> {
         if (data['adminId'] == null ||
             data['adminId'].toString().isEmpty) {
           await AppwriteService.databases.updateDocument(
-            databaseId: '69ecebfb0033cf785741',
+            databaseId: '6a2c10dc000d5e50f314',
             collectionId: 'attendance_logs',
             documentId: doc.$id,
             data: {'adminId': 'dean_master'},
@@ -408,7 +408,7 @@ class _AdminListTabState extends State<_AdminListTab> {
     super.initState();
     _fetchAdmins();
     _sub = AppwriteService.realtime
-        .subscribe(['databases.69ecebfb0033cf785741.collections.users.documents']);
+        .subscribe(['databases.6a2c10dc000d5e50f314.collections.users.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchAdmins();
     });
@@ -423,9 +423,18 @@ class _AdminListTabState extends State<_AdminListTab> {
   Future<void> _fetchAdmins() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'users',
-        queries: [Query.equal('role', 'admin')],
+        queries: [
+          Query.equal('role', [
+            'admin',
+            'officeAdmin',
+            'eventAdmin',
+            'hrAdmin',
+            'securityAdmin',
+          ]),
+          Query.limit(500),
+        ],
       );
       if (mounted) {
         setState(() {
@@ -433,17 +442,57 @@ class _AdminListTabState extends State<_AdminListTab> {
           _loading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) setState(() => _loading = false);
+      debugPrint('_fetchAdmins error: $e');
     }
   }
 
   void _showAddAdminSheet() {
+    const roleValues = [
+      'admin', 'admin', 'admin',
+      'officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin',
+    ];
+    const levelValues = [1, 2, 3, 0, 0, 0, 0];
+    const roleLabels = [
+      'Institution Admin', 'Dept. Head (HoD)', 'Team Leader',
+      'Office Admin', 'Event Admin', 'HR Admin', 'Security Admin',
+    ];
+    const roleShort = ['L1', 'L2', 'L3', 'Office', 'Event', 'HR', 'Security'];
+    const roleSubtitles = [
+      'L1 — Full institutional oversight',
+      'L2 — Department management',
+      'L3 — Class-level control',
+      'Biometrics & attendance records',
+      'Exclusive event hosting & QR scanning',
+      'Leave requests & registration approvals',
+      'Audit logs & access control',
+    ];
+    const roleIcons = [
+      Icons.account_balance_outlined,
+      Icons.domain_outlined,
+      Icons.class_outlined,
+      Icons.manage_accounts_outlined,
+      Icons.event_outlined,
+      Icons.people_alt_outlined,
+      Icons.security_outlined,
+    ];
+    const roleColors = [
+      Color(0xFF6A8A73),
+      Color(0xFF4E7A8A),
+      Color(0xFF7A6A8A),
+      Color(0xFF8A6A6A),
+      Color(0xFF3D6B8A),
+      Color(0xFF8A7A2A),
+      Color(0xFF8A2A2A),
+    ];
+    const roleNeedsDept = [true, true, true, true, false, true, false];
+
     final usernameCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final passCtrl = TextEditingController();
     String selectedDept = departments.first;
-    int selectedLevel = 1;
+    int selectedIdx = 0;
     bool saving = false;
 
     showModalBottomSheet(
@@ -453,190 +502,283 @@ class _AdminListTabState extends State<_AdminListTab> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-              left: 24,
-              right: 24,
-              top: 24),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-              Text("Onboard New Admin",
-                  style: GoogleFonts.poppins(
-                      fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text("Create a standard admin account for a department.",
-                  style: TextStyle(
-                      color: Colors.grey.shade600, fontSize: 13)),
-              const SizedBox(height: 24),
-              TextField(
-                controller: usernameCtrl,
-                decoration: InputDecoration(
-                    labelText: 'Admin Username (ID)',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12))),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameCtrl,
-                decoration: InputDecoration(
-                    labelText: 'Full Name',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12))),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: passCtrl,
-                decoration: InputDecoration(
-                    labelText: 'Initial Password',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12))),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: selectedDept,
-                decoration: InputDecoration(
-                    labelText: 'Department',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12))),
-                items: departments
-                    .map((d) =>
-                        DropdownMenuItem(value: d, child: Text(d, overflow: TextOverflow.ellipsis)))
-                    .toList(),
-                onChanged: (v) =>
-                    setSheetState(() => selectedDept = v!),
-              ),
-              const SizedBox(height: 16),
-              Text("Admin Level",
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              Row(
-                children: [1, 2, 3].map((level) {
-                  final selected = selectedLevel == level;
-                  return GestureDetector(
-                    onTap: () => setSheetState(() => selectedLevel = level),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      margin: const EdgeInsets.only(right: 10),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
+        builder: (ctx, setSheetState) {
+          final color = roleColors[selectedIdx];
+          return Padding(
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                left: 24,
+                right: 24,
+                top: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: selected ? kDeanDark : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: selected ? kDeanDark : Colors.grey.shade300,
-                        ),
-                      ),
-                      child: Text(
-                        "Level $level",
-                        style: TextStyle(
-                          color: selected ? kDeanGold : Colors.grey.shade600,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2)),
                     ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: saving
-                      ? null
-                      : () async {
-                          if (usernameCtrl.text.trim().isEmpty ||
-                              passCtrl.text.trim().isEmpty) return;
-                          setSheetState(() => saving = true);
+                  ),
+                  const SizedBox(height: 16),
+                  Text("Onboard New Admin",
+                      style: GoogleFonts.poppins(
+                          fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text("Select a role, then fill in the details.",
+                      style:
+                          TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  const SizedBox(height: 20),
 
-                          try {
-                            // Check if username already exists
-                            final exists = await AppwriteService.databases
-                                .listDocuments(
-                              databaseId: '69ecebfb0033cf785741',
-                              collectionId: 'users',
-                              queries: [
-                                Query.equal('username',
-                                    usernameCtrl.text.trim())
+                  // ─── Role type selector ────────────────────────────────
+                  Text("Admin Role",
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5)),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 76,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 7,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, i) {
+                        final selected = selectedIdx == i;
+                        return GestureDetector(
+                          onTap: () =>
+                              setSheetState(() => selectedIdx = i),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 72,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? roleColors[i]
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: selected
+                                    ? roleColors[i]
+                                    : Colors.grey.shade200,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(roleIcons[i],
+                                    size: 20,
+                                    color: selected
+                                        ? Colors.white
+                                        : roleColors[i]),
+                                const SizedBox(height: 5),
+                                Text(
+                                  roleShort[i],
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: selected
+                                          ? Colors.white
+                                          : roleColors[i]),
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                ),
                               ],
-                            );
-                            if (exists.documents.isNotEmpty) {
-                              setSheetState(() => saving = false);
-                              if (ctx.mounted) {
-                                ScaffoldMessenger.of(ctx).showSnackBar(
-                                    const SnackBar(
-                                        content: Text(
-                                            'Username already exists.')));
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  // Description of selected role
+                  const SizedBox(height: 10),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: color.withValues(alpha: 0.25), width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(roleIcons[selectedIdx], size: 15, color: color),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            roleSubtitles[selectedIdx],
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: color,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 22),
+
+                  // ─── Form fields ───────────────────────────────────────
+                  TextField(
+                    controller: usernameCtrl,
+                    decoration: InputDecoration(
+                        labelText: 'Admin Username (ID)',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                        labelText: 'Full Name',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                        labelText: 'Initial Password',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                  ),
+
+                  // Department — only for roles that need it
+                  if (roleNeedsDept[selectedIdx]) ...[
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: selectedDept,
+                      decoration: InputDecoration(
+                          labelText: 'Department',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12))),
+                      items: departments
+                          .map((d) => DropdownMenuItem(
+                              value: d,
+                              child: Text(d,
+                                  overflow: TextOverflow.ellipsis)))
+                          .toList(),
+                      onChanged: (v) =>
+                          setSheetState(() => selectedDept = v!),
+                    ),
+                  ],
+
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              if (usernameCtrl.text.trim().isEmpty ||
+                                  passCtrl.text.trim().isEmpty) return;
+                              setSheetState(() => saving = true);
+
+                              try {
+                                final exists = await AppwriteService.databases
+                                    .listDocuments(
+                                  databaseId: '6a2c10dc000d5e50f314',
+                                  collectionId: 'users',
+                                  queries: [
+                                    Query.equal('username',
+                                        usernameCtrl.text.trim()),
+                                  ],
+                                );
+                                if (exists.documents.isNotEmpty) {
+                                  setSheetState(() => saving = false);
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                        const SnackBar(
+                                            content: Text(
+                                                'Username already exists.')));
+                                  }
+                                  return;
+                                }
+
+                                final docData = <String, dynamic>{
+                                  'username': usernameCtrl.text.trim(),
+                                  'name': nameCtrl.text.trim().isNotEmpty
+                                      ? nameCtrl.text.trim()
+                                      : usernameCtrl.text.trim(),
+                                  'password': passCtrl.text.trim(),
+                                  'role': roleValues[selectedIdx],
+                                  'status': 'active',
+                                  'createdAt':
+                                      DateTime.now().toIso8601String(),
+                                };
+                                if (roleValues[selectedIdx] == 'admin') {
+                                  docData['level'] =
+                                      levelValues[selectedIdx];
+                                  docData['managedClasses'] = <String>[];
+                                }
+                                if (roleNeedsDept[selectedIdx]) {
+                                  docData['department'] = selectedDept;
+                                }
+
+                                await AppwriteService.databases
+                                    .createDocument(
+                                  databaseId: '6a2c10dc000d5e50f314',
+                                  collectionId: 'users',
+                                  documentId: ID.unique(),
+                                  data: docData,
+                                );
+
+                                if (!mounted) return;
+                                Navigator.pop(ctx);
+                                _fetchAdmins();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(SnackBar(
+                                          content: Text(
+                                              '${roleLabels[selectedIdx]} onboarded.')));
+                                }
+                              } catch (e) {
+                                setSheetState(() => saving = false);
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                      SnackBar(content: Text('Error: $e')));
+                                }
                               }
-                              return;
-                            }
-
-                            await AppwriteService.databases.createDocument(
-                              databaseId: '69ecebfb0033cf785741',
-                              collectionId: 'users',
-                              documentId: ID.unique(),
-                              data: {
-                                'username': usernameCtrl.text.trim(),
-                                'name': nameCtrl.text.trim().isNotEmpty
-                                    ? nameCtrl.text.trim()
-                                    : usernameCtrl.text.trim(),
-                                'password': passCtrl.text.trim(),
-                                'role': 'admin',
-                                'status': 'active',
-                                'department': selectedDept,
-                                'level': selectedLevel,
-                                'managedClasses': [],
-                                'createdAt':
-                                    DateTime.now().toIso8601String(),
-                              },
-                            );
-
-                            if (!mounted) return;
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content: Text(
-                                        'Admin ${usernameCtrl.text.trim()} onboarded successfully.')));
-                          } catch (e) {
-                            setSheetState(() => saving = false);
-                            if (ctx.mounted) {
-                              ScaffoldMessenger.of(ctx).showSnackBar(
-                                  SnackBar(
-                                      content: Text('Error: $e')));
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: kDeanDark,
-                      foregroundColor: kDeanGold,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12))),
-                  child: saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              color: kDeanGold, strokeWidth: 2))
-                      : const Text("Create Admin Profile",
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15)),
-                ),
+                            },
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: color,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12))),
+                      child: saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : Text(
+                              "Create ${roleLabels[selectedIdx]}",
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15)),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
               ),
-              const SizedBox(height: 40),
-            ],
-          ),
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -686,7 +828,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold)),
                         Text(
-                            "${data['department'] ?? 'No Dept'} â€¢ ${data['username']}",
+                            "${data['department'] ?? 'No Dept'} Ã¢â‚¬Â¢ ${data['username']}",
                             style: TextStyle(
                                 color: Colors.grey.shade600,
                                 fontSize: 13)),
@@ -756,7 +898,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                     onPressed: () async {
                       if (passCtrl.text.trim().isEmpty) return;
                       await AppwriteService.databases.updateDocument(
-                        databaseId: '69ecebfb0033cf785741',
+                        databaseId: '6a2c10dc000d5e50f314',
                         collectionId: 'users',
                         documentId: doc.$id,
                         data: {'password': passCtrl.text.trim()},
@@ -792,7 +934,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                         color: Colors.grey.shade500)),
                 onTap: () async {
                   await AppwriteService.databases.updateDocument(
-                    databaseId: '69ecebfb0033cf785741',
+                    databaseId: '6a2c10dc000d5e50f314',
                     collectionId: 'users',
                     documentId: doc.$id,
                     data: {
@@ -841,7 +983,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                   );
                   if (confirm == true) {
                     await AppwriteService.databases.deleteDocument(
-                      databaseId: '69ecebfb0033cf785741',
+                      databaseId: '6a2c10dc000d5e50f314',
                       collectionId: 'users',
                       documentId: doc.$id,
                     );
@@ -859,7 +1001,7 @@ class _AdminListTabState extends State<_AdminListTab> {
     );
   }
 
-  // ── Level colour/icon/label helpers ────────────────────────────────────────
+  // â"€â"€ Level colour/icon/label helpers â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   static const _levelMeta = {
     1: (
       color: Color(0xFF6A8A73),   // sage green
@@ -878,6 +1020,37 @@ class _AdminListTabState extends State<_AdminListTab> {
       icon: Icons.class_outlined,
       label: "Level 3",
       scope: "Class management",
+    ),
+  };
+
+  static const _specialRoleMeta = {
+    'officeAdmin': (
+      color: Color(0xFF8A6A6A),
+      icon: Icons.manage_accounts_outlined,
+      label: "Office Admin",
+      badge: "OA",
+      scope: "Biometrics & records",
+    ),
+    'eventAdmin': (
+      color: Color(0xFF3D6B8A),
+      icon: Icons.event_outlined,
+      label: "Event Admin",
+      badge: "EA",
+      scope: "Event hosting",
+    ),
+    'hrAdmin': (
+      color: Color(0xFF8A7A2A),
+      icon: Icons.people_alt_outlined,
+      label: "HR Admin",
+      badge: "HR",
+      scope: "Leave & approvals",
+    ),
+    'securityAdmin': (
+      color: Color(0xFF8A2A2A),
+      icon: Icons.security_outlined,
+      label: "Security Admin",
+      badge: "SA",
+      scope: "Audit & access control",
     ),
   };
 
@@ -916,35 +1089,56 @@ class _AdminListTabState extends State<_AdminListTab> {
   }
 
   Widget _buildGroupedList() {
-    // Bucket admins by level (default to 1 if missing)
-    final Map<int, List<models.Document>> grouped = {1: [], 2: [], 3: []};
+    final Map<int, List<models.Document>> levelGrouped = {1: [], 2: [], 3: []};
+    final Map<String, List<models.Document>> specialGrouped = {
+      'officeAdmin': [],
+      'eventAdmin': [],
+      'hrAdmin': [],
+      'securityAdmin': [],
+    };
+
     for (final doc in _admins) {
-      final lvl = (doc.data['level'] as int?) ?? 1;
-      final clamped = (lvl >= 1 && lvl <= 3) ? lvl : 1;
-      grouped[clamped]!.add(doc);
+      final role = doc.data['role'] as String? ?? 'admin';
+      if (role == 'admin') {
+        final lvl = (doc.data['level'] as int?) ?? 1;
+        final clamped = (lvl >= 1 && lvl <= 3) ? lvl : 1;
+        levelGrouped[clamped]!.add(doc);
+      } else if (specialGrouped.containsKey(role)) {
+        specialGrouped[role]!.add(doc);
+      }
     }
+
+    final specialCount =
+        specialGrouped.values.fold(0, (sum, list) => sum + list.length);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
       children: [
-        // Summary strip
-        _buildSummaryStrip(grouped),
+        _buildSummaryStrip(levelGrouped, specialCount),
         const SizedBox(height: 20),
 
-        // One section per level — only render if non-empty
         for (final level in [1, 2, 3])
-          if (grouped[level]!.isNotEmpty) ...[
-            _buildLevelHeader(level, grouped[level]!.length),
+          if (levelGrouped[level]!.isNotEmpty) ...[
+            _buildLevelHeader(level, levelGrouped[level]!.length),
             const SizedBox(height: 10),
-            ...grouped[level]!.map((doc) => _buildAdminCard(doc)),
+            ...levelGrouped[level]!.map((doc) => _buildAdminCard(doc)),
+            const SizedBox(height: 20),
+          ],
+
+        for (final role in ['officeAdmin', 'eventAdmin', 'hrAdmin', 'securityAdmin'])
+          if (specialGrouped[role]!.isNotEmpty) ...[
+            _buildSpecialRoleHeader(role, specialGrouped[role]!.length),
+            const SizedBox(height: 10),
+            ...specialGrouped[role]!.map((doc) => _buildAdminCard(doc)),
             const SizedBox(height: 20),
           ],
       ],
     );
   }
 
-  // ── Summary strip (three mini-stat tiles) ──────────────────────────────────
-  Widget _buildSummaryStrip(Map<int, List<models.Document>> grouped) {
+  // â"€â"€ Summary strip (three mini-stat tiles) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+  Widget _buildSummaryStrip(
+      Map<int, List<models.Document>> grouped, int specialCount) {
     return Row(
       children: [1, 2, 3].map((lvl) {
         final meta = _levelMeta[lvl]!;
@@ -999,7 +1193,7 @@ class _AdminListTabState extends State<_AdminListTab> {
     );
   }
 
-  // ── Section header for each level ─────────────────────────────────────────
+  // â"€â"€ Section header for each level â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   Widget _buildLevelHeader(int level, int count) {
     final meta = _levelMeta[level]!;
     return Row(
@@ -1049,14 +1243,85 @@ class _AdminListTabState extends State<_AdminListTab> {
     );
   }
 
-  // ── Individual admin card ──────────────────────────────────────────────────
+  Widget _buildSpecialRoleHeader(String role, int count) {
+    final meta = _specialRoleMeta[role]!;
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: meta.color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(meta.icon, color: meta.color, size: 18),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              meta.label,
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: meta.color),
+            ),
+            Text(
+              meta.scope,
+              style: const TextStyle(fontSize: 11, color: Colors.black45),
+            ),
+          ],
+        ),
+        const Spacer(),
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: meta.color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            "$count ${count == 1 ? 'admin' : 'admins'}",
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: meta.color),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // â"€â"€ Individual admin card â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   Widget _buildAdminCard(models.Document doc) {
     final data = doc.data;
     final isActive = data['status'] != 'disabled';
     final String? lastLoginStr = data['lastLogin'] as String?;
+    final String role = data['role'] as String? ?? 'admin';
     final int level = (data['level'] as int?) ?? 1;
-    final meta = _levelMeta[level] ??
-        (color: kDeanGold, icon: Icons.admin_panel_settings, label: "L?", scope: "");
+
+    final Color cardColor;
+    final IconData cardIcon;
+    final String badgeText;
+    if (role == 'admin') {
+      final m = _levelMeta[level] ?? _levelMeta[1]!;
+      cardColor = m.color;
+      cardIcon = m.icon;
+      badgeText = '$level';
+    } else {
+      final m = _specialRoleMeta[role] ??
+          (
+            color: kDeanGold,
+            icon: Icons.admin_panel_settings,
+            label: 'Admin',
+            badge: '?',
+            scope: '',
+          );
+      cardColor = m.color;
+      cardIcon = m.icon;
+      badgeText = m.badge;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1087,18 +1352,18 @@ class _AdminListTabState extends State<_AdminListTab> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                          color: meta.color.withValues(alpha: 0.35), width: 2),
+                          color: cardColor.withValues(alpha: 0.35), width: 2),
                       color: isActive
-                          ? meta.color.withValues(alpha: 0.08)
+                          ? cardColor.withValues(alpha: 0.08)
                           : Colors.red.withValues(alpha: 0.07),
                     ),
                     child: Icon(
-                      Icons.admin_panel_settings,
-                      color: isActive ? meta.color : Colors.red,
+                      cardIcon,
+                      color: isActive ? cardColor : Colors.red,
                       size: 22,
                     ),
                   ),
-                  // Tiny level badge on avatar
+                  // Badge: level number for standard admins, role code for special roles
                   Positioned(
                     bottom: 0,
                     right: 0,
@@ -1106,16 +1371,16 @@ class _AdminListTabState extends State<_AdminListTab> {
                       width: 16,
                       height: 16,
                       decoration: BoxDecoration(
-                        color: meta.color,
+                        color: cardColor,
                         shape: BoxShape.circle,
                         border:
                             Border.all(color: Colors.white, width: 1.5),
                       ),
                       child: Center(
                         child: Text(
-                          "$level",
+                          badgeText,
                           style: const TextStyle(
-                              fontSize: 8,
+                              fontSize: 7,
                               fontWeight: FontWeight.bold,
                               color: Colors.white),
                         ),
@@ -1179,7 +1444,7 @@ class _AdminListTabState extends State<_AdminListTab> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          "• ${data['username']}",
+                          "â€¢ ${data['username']}",
                           style: TextStyle(
                               fontSize: 12, color: Colors.grey.shade500),
                           overflow: TextOverflow.ellipsis,
@@ -1206,3 +1471,4 @@ class _AdminListTabState extends State<_AdminListTab> {
     );
   }
 }
+

@@ -1,4 +1,4 @@
-import 'package:appwrite/appwrite.dart';
+﻿import 'package:appwrite/appwrite.dart';
 
 class AppwriteService {
   static const String endpoint = 'https://sgp.cloud.appwrite.io/v1';
@@ -12,3 +12,5 @@ class AppwriteService {
   static final Storage storage = Storage(client);
   static final Realtime realtime = Realtime(client);
 }
+
+

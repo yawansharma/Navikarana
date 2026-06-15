@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -244,7 +244,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       }
 
       final classDoc = await AppwriteService.databases.getDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: widget.classId,
       );
@@ -252,7 +252,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
           classDoc.data['createdBy'] ?? classDoc.data['adminId'] ?? '';
 
       await AppwriteService.databases.createDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'attendance_logs',
         documentId: ID.unique(),
         data: {
@@ -530,7 +530,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         children: [
           FutureBuilder<models.DocumentList>(
             future: AppwriteService.databases.listDocuments(
-              databaseId: '69ecebfb0033cf785741',
+              databaseId: '6a2c10dc000d5e50f314',
               collectionId: 'attendance_logs',
               queries: [
                 Query.equal('userId', widget.username),
@@ -654,7 +654,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                     Expanded(
                       child: FutureBuilder<models.DocumentList>(
                         future: AppwriteService.databases.listDocuments(
-                          databaseId: '69ecebfb0033cf785741',
+                          databaseId: '6a2c10dc000d5e50f314',
                           collectionId: 'periods',
                           queries: [
                             Query.equal('classId', widget.classId),
@@ -680,7 +680,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
 
                           return FutureBuilder<models.DocumentList>(
                             future: AppwriteService.databases.listDocuments(
-                              databaseId: '69ecebfb0033cf785741',
+                              databaseId: '6a2c10dc000d5e50f314',
                               collectionId: 'attendance_logs',
                               queries: [
                                 Query.equal('userId', widget.username),
@@ -695,7 +695,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                                   ),
                                 );
 
-                              // Map logs by periodId â€” keep most recent if duplicates exist
+                              // Map logs by periodId Ã¢â‚¬â€ keep most recent if duplicates exist
                               Map<String, Map<String, dynamic>> logMap = {};
                               for (var log in logSnap.data!.documents) {
                                 final data = log.data;
@@ -908,7 +908,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       ),
       floatingActionButton: FutureBuilder<models.DocumentList>(
         future: AppwriteService.databases.listDocuments(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: '6a2c10dc000d5e50f314',
           collectionId: 'periods',
           queries: [Query.equal('classId', widget.classId)],
         ),
@@ -942,7 +942,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
 
           return FutureBuilder<models.DocumentList>(
             future: AppwriteService.databases.listDocuments(
-              databaseId: '69ecebfb0033cf785741',
+              databaseId: '6a2c10dc000d5e50f314',
               collectionId: 'attendance_logs',
               queries: [
                 Query.equal('userId', widget.username),
@@ -1028,3 +1028,5 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
+
+

@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
@@ -11,12 +11,16 @@ class AdminStudentDirectoryPage extends StatefulWidget {
   final String? adminDepartment;
   final String adminId;
   final List<models.Document> classes;
+  final bool showInviteButton;
+  final void Function(models.Document studentDoc)? onViewAttendance;
 
   const AdminStudentDirectoryPage({
     super.key,
     this.adminDepartment,
     required this.adminId,
     required this.classes,
+    this.showInviteButton = true,
+    this.onViewAttendance,
   });
 
   @override
@@ -37,7 +41,7 @@ class _AdminStudentDirectoryPageState extends State<AdminStudentDirectoryPage> {
   Future<void> _fetchStudents() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'users',
         queries: [
           Query.limit(5000),
@@ -132,7 +136,7 @@ class _AdminStudentDirectoryPageState extends State<AdminStudentDirectoryPage> {
         boundary['invitedStudents'] = invited;
         
         await AppwriteService.databases.updateDocument(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: '6a2c10dc000d5e50f314',
           collectionId: 'classes',
           documentId: selectedClass.$id,
           data: {
@@ -278,19 +282,36 @@ class _AdminStudentDirectoryPageState extends State<AdminStudentDirectoryPage> {
           const SizedBox(height: 12),
           _detailRow(Icons.verified_user_outlined, "Status", (data['status'] ?? 'Unknown').toString().toUpperCase()),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => _inviteStudent(doc),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.kGreen,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          if (widget.showInviteButton)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _inviteStudent(doc),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.kGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.send_rounded, size: 18),
+                label: const Text("Invite to Class", style: TextStyle(fontWeight: FontWeight.bold)),
               ),
-              icon: const Icon(Icons.send_rounded, size: 18),
-              label: const Text("Invite to Class", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-          ),
+          if (widget.onViewAttendance != null) ...[
+            if (widget.showInviteButton) const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => widget.onViewAttendance!(doc),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF8A6A6A),
+                  side: const BorderSide(color: Color(0xFF8A6A6A)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.history_outlined, size: 18),
+                label: const Text("View Attendance", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -312,3 +333,5 @@ class _AdminStudentDirectoryPageState extends State<AdminStudentDirectoryPage> {
     );
   }
 }
+
+

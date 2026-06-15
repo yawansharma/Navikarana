@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
@@ -41,7 +41,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _fetchClasses();
     _sub = AppwriteService.realtime
-        .subscribe(['databases.69ecebfb0033cf785741.collections.classes.documents']);
+        .subscribe(['databases.6a2c10dc000d5e50f314.collections.classes.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchClasses();
     });
@@ -56,13 +56,13 @@ class _HomePageState extends State<HomePage> {
   Future<void> _fetchClasses() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         queries: [Query.contains('studentIds', widget.username)],
       );
 
       final userResult = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'users',
         queries: [Query.equal('username', widget.username)],
       );
@@ -88,7 +88,7 @@ class _HomePageState extends State<HomePage> {
         Set<String> adminUsernames = {};
         if (dept != null && dept.isNotEmpty) {
           final adminResult = await AppwriteService.databases.listDocuments(
-            databaseId: '69ecebfb0033cf785741',
+            databaseId: '6a2c10dc000d5e50f314',
             collectionId: 'users',
             queries: [
               Query.equal('role', 'admin'),
@@ -103,7 +103,7 @@ class _HomePageState extends State<HomePage> {
         }
 
         final allClassesResult = await AppwriteService.databases.listDocuments(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: '6a2c10dc000d5e50f314',
           collectionId: 'classes',
           queries: [Query.limit(500)],
         );
@@ -256,7 +256,7 @@ class _HomePageState extends State<HomePage> {
 
               try {
                 final classQuery = await AppwriteService.databases.listDocuments(
-                  databaseId: '69ecebfb0033cf785741',
+                  databaseId: '6a2c10dc000d5e50f314',
                   collectionId: 'classes',
                   queries: [Query.equal('classCode', code)],
                 );
@@ -326,7 +326,7 @@ class _HomePageState extends State<HomePage> {
       boundary['rejectedStudents'] = rejected;
 
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: classId,
         data: {'boundary': jsonEncode(boundary)},
@@ -352,7 +352,7 @@ class _HomePageState extends State<HomePage> {
       boundary['pendingStudents'] = pending;
 
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: classId,
         data: {'boundary': jsonEncode(boundary)},
@@ -383,7 +383,7 @@ class _HomePageState extends State<HomePage> {
       }
 
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: classId,
         data: {
@@ -412,7 +412,7 @@ class _HomePageState extends State<HomePage> {
       boundary['invitedStudents'] = invited;
 
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         documentId: classId,
         data: {'boundary': jsonEncode(boundary)},
@@ -571,7 +571,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
 
-        // ── Enrolled classes ──────────────────────────────────────────────
+        // â”€â”€ Enrolled classes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (_classes.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
@@ -615,7 +615,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ] else ...[
-          // No enrolled classes yet — show compact prompt
+          // No enrolled classes yet â€” show compact prompt
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
@@ -624,7 +624,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
 
-        // ── Invitations ───────────────────────────────────────────────────
+        // â”€â”€ Invitations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (_invitedClasses.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
@@ -650,7 +650,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
 
-        // ── My Requests ───────────────────────────────────────────────────
+        // â”€â”€ My Requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (_pendingClasses.isNotEmpty || _rejectedClasses.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
@@ -689,7 +689,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
 
-        // ── Explore Classes ───────────────────────────────────────────────
+        // â”€â”€ Explore Classes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (_departmentClasses.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
@@ -1144,7 +1144,7 @@ class _HomePageState extends State<HomePage> {
 }
 
 // =============================================================================
-// _ActivePeriodsBanner – shows active/upcoming sessions for all joined classes
+// _ActivePeriodsBanner â€“ shows active/upcoming sessions for all joined classes
 // =============================================================================
 class _ActivePeriodsBanner extends StatefulWidget {
   final List<models.Document> classDocs;
@@ -1166,7 +1166,7 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
     super.initState();
     _fetchAllPeriods();
     _sub = AppwriteService.realtime
-        .subscribe(['databases.69ecebfb0033cf785741.collections.periods.documents']);
+        .subscribe(['databases.6a2c10dc000d5e50f314.collections.periods.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchAllPeriods();
     });
@@ -1197,7 +1197,7 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
 
       try {
         final result = await AppwriteService.databases.listDocuments(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: '6a2c10dc000d5e50f314',
           collectionId: 'periods',
           queries: [
             Query.equal('classId', classId),
@@ -1402,3 +1402,5 @@ class _ActivePeriodsBannerState extends State<_ActivePeriodsBanner> {
     );
   }
 }
+
+

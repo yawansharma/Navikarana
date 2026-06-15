@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -19,11 +19,13 @@ const Color _kBg = Color(0xFFF8F9FB);
 class AdminDistributionTab extends StatefulWidget {
   final String adminId;
   final String adminName;
+  final bool canHostEvents;
 
   const AdminDistributionTab({
     super.key,
     required this.adminId,
     required this.adminName,
+    this.canHostEvents = true,
   });
 
   @override
@@ -41,7 +43,7 @@ class _AdminDistributionTabState extends State<AdminDistributionTab> {
     super.initState();
     _fetchAllEvents();
     _sub = AppwriteService.realtime.subscribe([
-      'databases.69ecebfb0033cf785741.collections.distribution_events.documents',
+      'databases.6a2c10dc000d5e50f314.collections.distribution_events.documents',
     ]);
     _sub!.stream.listen((_) {
       if (mounted) _fetchAllEvents();
@@ -65,7 +67,7 @@ class _AdminDistributionTabState extends State<AdminDistributionTab> {
       final myEventsResult = results[0] as models.DocumentList;
       final assignedEventsResult = results[1] as List<models.Document>;
 
-      // Remove duplicates — if an event was created by this admin AND assigned to them
+      // Remove duplicates â€” if an event was created by this admin AND assigned to them
       final myEventIds = myEventsResult.documents.map((e) => e.$id).toSet();
       final filteredAssigned = assignedEventsResult
           .where((e) => !myEventIds.contains(e.$id))
@@ -275,20 +277,21 @@ class _AdminDistributionTabState extends State<AdminDistributionTab> {
             : (_myEvents.isEmpty && _assignedEvents.isEmpty)
             ? _buildEmptyState()
             : _buildEventList(),
-        Positioned(
-          bottom: 20,
-          right: 20,
-          child: FloatingActionButton.extended(
-            backgroundColor: _kGreen,
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.add),
-            label: Text(
-              "New Event",
-              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        if (widget.canHostEvents)
+          Positioned(
+            bottom: 20,
+            right: 20,
+            child: FloatingActionButton.extended(
+              backgroundColor: _kGreen,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: Text(
+                "New Event",
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+              ),
+              onPressed: _showCreateEventSheet,
             ),
-            onPressed: _showCreateEventSheet,
           ),
-        ),
       ],
     );
   }
@@ -415,7 +418,7 @@ class _AdminDistributionTabState extends State<AdminDistributionTab> {
 }
 
 // =============================================================================
-// Event tile — shared card for both my events and assigned events
+// Event tile â€” shared card for both my events and assigned events
 // =============================================================================
 
 class _EventTile extends StatelessWidget {
@@ -443,7 +446,7 @@ class _EventTile extends StatelessWidget {
         ? DateFormat(
             'MMM dd, yyyy',
           ).format(DateTime.parse(d['scheduledDate'] as String))
-        : '—';
+        : 'â€”';
 
     return GestureDetector(
       onTap: onTap,
@@ -612,7 +615,7 @@ class _EventTile extends StatelessWidget {
 }
 
 // =============================================================================
-// Assigned event view — simple read-only detail + scan button
+// Assigned event view â€” simple read-only detail + scan button
 // =============================================================================
 
 class _AssignedEventView extends StatelessWidget {
@@ -635,7 +638,7 @@ class _AssignedEventView extends StatelessWidget {
         ? DateFormat(
             'MMM dd, yyyy',
           ).format(DateTime.parse(d['scheduledDate'] as String))
-        : '—';
+        : 'â€”';
     final progress = total > 0 ? issued / total : 0.0;
 
     return DraggableScrollableSheet(
@@ -811,7 +814,7 @@ class _AssignedEventView extends StatelessWidget {
 }
 
 // =============================================================================
-// Admin Event Detail Sheet — full management (owner view)
+// Admin Event Detail Sheet â€” full management (owner view)
 // =============================================================================
 
 class _AdminEventDetailSheet extends StatefulWidget {
@@ -1005,7 +1008,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
           "Adding recipients (${i + 1} / ${usernames.length})...";
       try {
         final userQuery = await AppwriteService.databases.listDocuments(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: '6a2c10dc000d5e50f314',
           collectionId: 'users',
           queries: [Query.equal('username', uid), Query.limit(1)],
         );
@@ -1096,7 +1099,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                     try {
                       final byName = await AppwriteService.databases
                           .listDocuments(
-                            databaseId: '69ecebfb0033cf785741',
+                            databaseId: '6a2c10dc000d5e50f314',
                             collectionId: 'users',
                             queries: [
                               Query.startsWith('name', q.trim()),
@@ -1105,7 +1108,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                           );
                       final byId = await AppwriteService.databases
                           .listDocuments(
-                            databaseId: '69ecebfb0033cf785741',
+                            databaseId: '6a2c10dc000d5e50f314',
                             collectionId: 'users',
                             queries: [
                               Query.startsWith('username', q.trim()),
@@ -1141,11 +1144,11 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                         return ListTile(
                           dense: true,
                           title: Text(
-                            u['name'] as String? ?? '—',
+                            u['name'] as String? ?? 'â€”',
                             style: GoogleFonts.poppins(fontSize: 13),
                           ),
                           subtitle: Text(
-                            u['username'] as String? ?? '—',
+                            u['username'] as String? ?? 'â€”',
                             style: GoogleFonts.poppins(fontSize: 11),
                           ),
                           trailing: alreadyAdded
@@ -1214,7 +1217,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
             Future(() async {
               try {
                 final r = await AppwriteService.databases.listDocuments(
-                  databaseId: '69ecebfb0033cf785741',
+                  databaseId: '6a2c10dc000d5e50f314',
                   collectionId: 'users',
                   queries: [Query.equal('role', 'admin'), Query.limit(50)],
                 );
@@ -1271,11 +1274,11 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                               foregroundColor: _kGreen,
                             ),
                             title: Text(
-                              u['name'] as String? ?? '—',
+                              u['name'] as String? ?? 'â€”',
                               style: GoogleFonts.poppins(fontSize: 13),
                             ),
                             subtitle: Text(
-                              "Level ${u['level'] ?? '—'}",
+                              "Level ${u['level'] ?? 'â€”'}",
                               style: GoogleFonts.poppins(fontSize: 11),
                             ),
                             trailing: alreadyAssigned
@@ -1368,7 +1371,7 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                         ? DateFormat(
                             'MMM dd, HH:mm',
                           ).format(DateTime.parse(ts).toLocal())
-                        : '—';
+                        : 'â€”';
                     final actionColor =
                         {
                           'issued': Colors.green,
@@ -1396,14 +1399,14 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  l['scannedUserId'] as String? ?? '—',
+                                  l['scannedUserId'] as String? ?? 'â€”',
                                   style: GoogleFonts.poppins(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 Text(
-                                  "$action • $timeStr",
+                                  "$action â€¢ $timeStr",
                                   style: GoogleFonts.poppins(
                                     fontSize: 10,
                                     color: Colors.grey.shade500,
@@ -1542,11 +1545,11 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                             ),
                           ),
                           title: Text(
-                            a.data['adminName'] as String? ?? '—',
+                            a.data['adminName'] as String? ?? 'â€”',
                             style: GoogleFonts.poppins(fontSize: 13),
                           ),
                           subtitle: Text(
-                            a.data['adminId'] as String? ?? '—',
+                            a.data['adminId'] as String? ?? 'â€”',
                             style: GoogleFonts.poppins(fontSize: 11),
                           ),
                           trailing: status != 'closed'
@@ -1591,11 +1594,11 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
                           dense: true,
                           leading: _recipientStatusIcon(rStatus),
                           title: Text(
-                            r.data['userName'] as String? ?? '—',
+                            r.data['userName'] as String? ?? 'â€”',
                             style: GoogleFonts.poppins(fontSize: 13),
                           ),
                           subtitle: Text(
-                            r.data['userId'] as String? ?? '—',
+                            r.data['userId'] as String? ?? 'â€”',
                             style: GoogleFonts.poppins(fontSize: 11),
                           ),
                           trailing: rStatus == 'pending' && status != 'closed'
@@ -1950,3 +1953,5 @@ class _AdminEventDetailSheetState extends State<_AdminEventDetailSheet> {
     );
   }
 }
+
+

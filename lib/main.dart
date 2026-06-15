@@ -1,4 +1,4 @@
-import 'dart:async'; // Required for Splash Screen Timer
+﻿import 'dart:async'; // Required for Splash Screen Timer
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'register_page.dart';
@@ -216,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
       final password = passwordController.text.trim();
 
       final response = await AppwriteService.databases.listDocuments(
-  databaseId: '69ecebfb0033cf785741',
+  databaseId: '6a2c10dc000d5e50f314',
   collectionId: 'users',
   queries: [
     Query.equal('username', uniqueCode),
@@ -254,7 +254,7 @@ if (response.documents.isEmpty) {
       statusText.value = "Finalizing...";
 
       await AppwriteService.databases.updateDocument(
-  databaseId: '69ecebfb0033cf785741',
+  databaseId: '6a2c10dc000d5e50f314',
   collectionId: 'users',
   documentId: response.documents.first.$id,
   data: {
@@ -551,3 +551,4 @@ if (response.documents.isEmpty) {
     );
   }
 }
+

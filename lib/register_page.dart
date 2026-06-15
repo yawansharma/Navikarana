@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
@@ -195,7 +195,7 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   await AppwriteService.databases.createDocument(
-    databaseId: '69ecebfb0033cf785741',
+    databaseId: '6a2c10dc000d5e50f314',
     collectionId: 'users',
     documentId: ID.unique(),
     data: data,
@@ -209,7 +209,7 @@ class _RegisterPageState extends State<RegisterPage> {
     if (_selectedSchool == null) { _showSnackBar("Please select your school."); return; }
 
     final existingUser = await AppwriteService.databases.listDocuments(
-  databaseId: '69ecebfb0033cf785741',
+  databaseId: '6a2c10dc000d5e50f314',
   collectionId: 'users',
   queries: [
     Query.equal('username', uniqueCodeController.text.trim()),
@@ -232,7 +232,7 @@ class _RegisterPageState extends State<RegisterPage> {
         final extension = _localPhoto!.path.split('.').last.toLowerCase();
         final filename = 'profile_${uniqueCodeController.text.trim()}_${DateTime.now().millisecondsSinceEpoch}.$extension';
         final uploadedFile = await AppwriteService.storage.createFile(
-          bucketId: '6a2bd4280020cd413c57',
+          bucketId: '6a2c12a500260c940843',
           fileId: ID.unique(),
           file: InputFile.fromBytes(
             bytes: bytes,
@@ -589,3 +589,4 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 }
+

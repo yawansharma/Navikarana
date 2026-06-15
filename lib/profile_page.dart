@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart';
@@ -35,7 +35,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'users',
         queries: [Query.equal('username', widget.username)],
       );
@@ -47,7 +47,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       final docId = result.documents.first.$id;
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'users',
         documentId: docId,
         data: {'password': _newPasswordController.text.trim()},
@@ -137,3 +137,5 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 }
+
+

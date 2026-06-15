@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_theme.dart';
@@ -47,7 +47,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
     try {
       // 1. Fetch all admins
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'users',
         queries: [
           Query.equal('role', 'admin'),
@@ -58,7 +58,7 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
 
       // 2. Fetch all classes to determine relationships
       final classesResult = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: '6a2c10dc000d5e50f314',
         collectionId: 'classes',
         queries: [
           Query.limit(500),
@@ -207,9 +207,9 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
     if (depth == 0) return const SizedBox.shrink();
     String prefix = "";
     for (int i = 0; i < depth - 1; i++) {
-      prefix += isLastList[i] ? "        " : "   │    ";
+      prefix += isLastList[i] ? "        " : "   â”‚    ";
     }
-    prefix += isLast ? "   └── " : "   ├── ";
+    prefix += isLast ? "   â””â”€â”€ " : "   â”œâ”€â”€ ";
     return Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Text(
@@ -324,3 +324,5 @@ class _AdminOrgChartPageState extends State<AdminOrgChartPage> {
     );
   }
 }
+
+

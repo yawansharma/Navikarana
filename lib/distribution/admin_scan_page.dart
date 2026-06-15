@@ -45,7 +45,7 @@ class _AdminScanPageState extends State<AdminScanPage> {
     super.dispose();
   }
 
-  // ── QR decoded ─────────────────────────────────────────────────────────────
+  // â”€â”€ QR decoded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<void> _handleRawQr(String raw) async {
     if (_processing || _sheetOpen) return;
@@ -61,7 +61,7 @@ class _AdminScanPageState extends State<AdminScanPage> {
     await _openVerificationSheet(userId);
   }
 
-  // ── Load user & open sheet ──────────────────────────────────────────────────
+  // â”€â”€ Load user & open sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<void> _openVerificationSheet(String userId) async {
     if (_sheetOpen) return;
@@ -74,7 +74,7 @@ class _AdminScanPageState extends State<AdminScanPage> {
     Map<String, dynamic>? userData;
     try {
       final res = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [Query.equal('username', userId), Query.limit(1)],
       );
@@ -116,7 +116,7 @@ class _AdminScanPageState extends State<AdminScanPage> {
     });
   }
 
-  // ── Build ───────────────────────────────────────────────────────────────────
+  // â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   @override
   Widget build(BuildContext context) {
@@ -313,7 +313,7 @@ class _AdminScanPageState extends State<AdminScanPage> {
     );
   }
 
-  // ── Corner painter helpers ──────────────────────────────────────────────────
+  // â”€â”€ Corner painter helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   List<Widget> _corners() {
     const c = Color(0xFF6A8A73);
@@ -378,9 +378,9 @@ class _UserVerificationSheetState extends State<_UserVerificationSheet> {
   String get _name =>
       widget.userData?['name'] as String? ?? widget.userId;
   String get _dept =>
-      widget.userData?['department'] as String? ?? '—';
+      widget.userData?['department'] as String? ?? 'â€”';
 
-  // ── Face capture ────────────────────────────────────────────────────────────
+  // â”€â”€ Face capture â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<void> _captureAndVerify() async {
     // Step 1: capture face photo
@@ -482,7 +482,7 @@ class _UserVerificationSheetState extends State<_UserVerificationSheet> {
           status: _FeedbackStatus.success,
           headline: skipFace
               ? "Package Issued (face skipped on desktop)"
-              : "Package Issued ✓ Face Verified",
+              : "Package Issued âœ“ Face Verified",
           sub: result.userName ?? widget.userId,
         );
         break;
@@ -492,7 +492,7 @@ class _UserVerificationSheetState extends State<_UserVerificationSheet> {
           status: _FeedbackStatus.warning,
           headline: "Already Issued",
           sub:
-              "${result.userName ?? widget.userId} — $when by ${result.issuedBy ?? '?'}",
+              "${result.userName ?? widget.userId} â€” $when by ${result.issuedBy ?? '?'}",
         );
         break;
       case ScanStatus.notInList:
@@ -537,7 +537,7 @@ class _UserVerificationSheetState extends State<_UserVerificationSheet> {
     }
   }
 
-  // ── Build ───────────────────────────────────────────────────────────────────
+  // â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   @override
   Widget build(BuildContext context) {
@@ -844,3 +844,5 @@ class _ProcessingBanner extends StatelessWidget {
     );
   }
 }
+
+

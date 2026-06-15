@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:intl/intl.dart';
@@ -54,10 +54,10 @@ class _LeaveManagementPageState extends State<LeaveManagementPage>
 
   Future<void> _fetchApprovals() async {
     try {
-      // Fetch requests where level is level - 1?
-      // User said "X -> X+1 person approves".
-      // So if I am Level 2, I approve Level 1.
-      // approverLevel in document is level of the person WHO SHOULD APPROVE.
+      // Hierarchy: Level 1 is top admin, Level 3 is class-level.
+      // A Level 3 admin submits to Level 2; Level 2 submits to Level 1.
+      // So if I am Level 2, I approve requests from Level 3 (approverLevel == 2).
+      // approverLevel in document is the level of the person WHO SHOULD APPROVE.
       final res = await LeaveService.getPendingRequests(widget.userLevel);
       if (mounted) {
         setState(() {
@@ -298,3 +298,4 @@ class _LeaveManagementPageState extends State<LeaveManagementPage>
         child: Text(msg, style: const TextStyle(color: Colors.grey)),
       );
 }
+

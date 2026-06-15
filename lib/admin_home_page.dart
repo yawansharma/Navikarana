@@ -17,9 +17,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'services/appwrite_service.dart';
 import 'leave_management_page.dart';
 import 'distribution/admin_distribution_tab.dart';
+import 'services/admin_hierarchy_service.dart';
+import 'admin_hierarchy_views.dart';
+import 'admin_approval_requests_page.dart';
+import 'admin_org_chart_page.dart';
+import 'admin_student_directory_page.dart';
+import 'components/user_avatar.dart';
 
 // =============================================================================
-// AdminHomePage â€” 3-tab shell: Classes | Analytics | Settings
+// AdminHomePage Ã¢â‚¬â€ 3-tab shell: Classes | Analytics | Settings
 // =============================================================================
 class AdminHomePage extends StatefulWidget {
   final String adminName;
@@ -42,6 +48,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   int _prevIndex = 0;
   DateTimeRange? _dateRange;
   String? _classFilter;
+  String? _adminDepartment;
 
   // Classes tab state
   List<models.Document> _classes = [];
@@ -55,6 +62,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
   bool _selectionMode = false;
   final Set<String> _selectedLogIds = {};
 
+
+  // Pagination for logs
+  final ScrollController _logsScrollController = ScrollController();
+  bool _isLoadingMoreLogs = false;
+
   // Realtime subscriptions
   RealtimeSubscription? _classesSub;
   RealtimeSubscription? _logsSub;
@@ -62,8 +74,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
   @override
   void initState() {
     super.initState();
-    _fetchClasses();
-    _fetchLogs();
+    _fetchAdminProfile();
+    _fetchClasses().then((_) {
+      if (mounted) _fetchLogs();
+    });
+
+    _logsScrollController.addListener(() {
+      if (_logsScrollController.position.pixels >= _logsScrollController.position.maxScrollExtent - 200) {
+        _loadMoreLogs();
+      }
+    });
+
     _classesSub = AppwriteService.realtime
         .subscribe(['databases.main_db.collections.classes.documents']);
     _classesSub!.stream.listen((_) {
@@ -76,23 +97,71 @@ class _AdminHomePageState extends State<AdminHomePage> {
     });
   }
 
+  Future<void> _fetchAdminProfile() async {
+    try {
+      final res = await AppwriteService.databases.listDocuments(
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'users',
+        queries: [
+          Query.equal('username', widget.adminId),
+          Query.limit(1),
+        ],
+      );
+      if (res.documents.isNotEmpty && mounted) {
+        setState(() {
+          _adminDepartment =
+              res.documents.first.data['department'] as String?;
+        });
+      }
+    } catch (_) {
+      // ignore â€“ department filter is best-effort
+    }
+  }
+
   @override
   void dispose() {
     _classesSub?.close();
     _logsSub?.close();
+    _logsScrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadMoreLogs() async {
+    if (widget.adminLevel != 1) return;
+    if (_isLoadingMoreLogs || _logs.isEmpty) return;
+    setState(() => _isLoadingMoreLogs = true);
+    try {
+      final lastId = _logs.last.$id;
+      final result = await AppwriteService.databases.listDocuments(
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'attendance_logs',
+        queries: [
+          Query.equal('adminId', widget.adminId),
+          Query.orderDesc('timestamp'),
+          Query.limit(50),
+          Query.cursorAfter(lastId),
+        ],
+      );
+      if (mounted) {
+        setState(() {
+          _logs.addAll(result.documents);
+          _isLoadingMoreLogs = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMoreLogs = false);
+    }
   }
 
   Future<void> _fetchClasses() async {
     try {
-      final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
-        collectionId: 'classes',
-        queries: [Query.equal('createdBy', widget.adminId)],
+      final docs = await AdminHierarchyService.fetchClassesForAdmin(
+        adminId: widget.adminId,
+        adminLevel: widget.adminLevel,
       );
       if (mounted) {
         setState(() {
-          _classes = result.documents;
+          _classes = docs;
           _classesLoading = false;
         });
       }
@@ -103,18 +172,56 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   Future<void> _fetchLogs() async {
     try {
-      final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
-        collectionId: 'attendance_logs',
-        queries: [
-          Query.equal('adminId', widget.adminId),
-          Query.orderDesc('timestamp'),
-          Query.limit(5000),
-        ],
-      );
+      List<String> classIds =
+          _classes.map((c) => c.$id).toList();
+      if (classIds.isEmpty && widget.adminLevel != 1) {
+        if (mounted) {
+          setState(() {
+            _logs = [];
+            _logsLoading = false;
+          });
+        }
+        return;
+      }
+
+      final List<models.Document> allLogs = [];
+      if (widget.adminLevel == 1) {
+        final result = await AppwriteService.databases.listDocuments(
+          databaseId: AppwriteService.databaseId,
+          collectionId: 'attendance_logs',
+          queries: [
+            Query.equal('adminId', widget.adminId),
+            Query.orderDesc('timestamp'),
+            Query.limit(50),
+          ],
+        );
+        allLogs.addAll(result.documents);
+      } else {
+        for (final classId in classIds) {
+          try {
+            final result = await AppwriteService.databases.listDocuments(
+              databaseId: AppwriteService.databaseId,
+              collectionId: 'attendance_logs',
+              queries: [
+                Query.equal('classId', classId),
+                Query.orderDesc('timestamp'),
+                Query.limit(500),
+              ],
+            );
+            allLogs.addAll(result.documents);
+          } catch (_) {}
+        }
+        allLogs.sort((a, b) {
+          final ta = a.data['timestamp'] as String? ?? '';
+          final tb = b.data['timestamp'] as String? ?? '';
+          return tb.compareTo(ta);
+        });
+      }
+
+      final result = allLogs;
       if (mounted) {
         setState(() {
-          _logs = result.documents;
+          _logs = result;
           _logsLoading = false;
         });
       }
@@ -231,10 +338,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         showUnselectedLabels: false,
                         elevation: 0,
                         type: BottomNavigationBarType.fixed,
-                        items: const [
+                        items: [
                           BottomNavigationBarItem(
-                              icon: Icon(Icons.class_outlined, size: 22),
-                              label: "Classes"),
+                              icon: Icon(
+                                  widget.adminLevel == 2
+                                      ? Icons.groups_outlined
+                                      : Icons.class_outlined,
+                                  size: 22),
+                              label: widget.adminLevel == 2 ? "Team" : "Classes"),
                           BottomNavigationBarItem(
                               icon: Icon(Icons.analytics_outlined, size: 22),
                               label: "Analytics"),
@@ -262,7 +373,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   String _tabTitle() {
     switch (_currentIndex) {
       case 0:
-        return "Classes";
+        return widget.adminLevel == 2 ? "Team" : "Classes";
       case 1:
         return "Analytics";
       case 2:
@@ -275,8 +386,70 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   List<Widget> _buildAppBarActions() {
+    List<Widget> actions = [];
+
+    // Org Chart: All Admins
+    actions.add(
+      IconButton(
+        icon: const Icon(Icons.account_tree_outlined, color: Colors.white),
+        tooltip: "Organizational Chart",
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminOrgChartPage(
+                currentAdminId: widget.adminId,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    // Student Directory: Level 2 and Level 3 Admins
+    if (widget.adminLevel == 2 || widget.adminLevel == 3) {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.folder_shared_outlined, color: Colors.white),
+          tooltip: "Student Directory",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdminStudentDirectoryPage(
+                  adminDepartment: _adminDepartment,
+                  adminId: widget.adminId,
+                  classes: _classes,
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // Level 2 Admin: Registration Approval Requests
+    if (widget.adminLevel == 2) {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.person_add_alt_1_outlined, color: Colors.white),
+          tooltip: "Pending Registrations",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AdminApprovalRequestsPage(
+                  adminDepartment: _adminDepartment,
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
     if (_currentIndex == 1) {
-      return [
+      actions.addAll([
         if (_dateRange != null)
           IconButton(
             icon: const Icon(Icons.close, color: Colors.redAccent),
@@ -304,16 +477,16 @@ class _AdminHomePageState extends State<AdminHomePage> {
             if (picked != null) setState(() => _dateRange = picked);
           },
         ),
-      ];
+      ]);
     }
-    return [];
+    return actions;
   }
 
   Widget _buildCurrentTab() {
     final tabs = [
       _buildClassesTab(),
       _buildGlobalLogsTab(),
-      AdminDistributionTab(adminId: widget.adminId, adminName: widget.adminName),
+      AdminDistributionTab(adminId: widget.adminId, adminName: widget.adminName, canHostEvents: false),
       _buildMoreTab(),
     ];
     final bool goingRight = _currentIndex > _prevIndex;
@@ -344,9 +517,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // ===========================================================================
-  // TAB 0 â€” CLASSES
+  // TAB 0 Ã¢â‚¬â€ CLASSES
   // ===========================================================================
   Widget _buildClassesTab() {
+    if (widget.adminLevel == 2) {
+      return L2TeamTab(adminId: widget.adminId, adminName: widget.adminName);
+    }
+
     if (_classesLoading) {
       return const Center(
           child: CircularProgressIndicator(color: Color(0xFF6A8A73)));
@@ -355,14 +532,27 @@ class _AdminHomePageState extends State<AdminHomePage> {
     return Stack(
       children: [
         _classes.isEmpty
-            ? const Center(
-                child: Text("No classes yet. Create one!",
-                    style: TextStyle(color: Colors.grey)))
+            ? Center(
+                child: Text(
+                  widget.adminLevel == 3
+                      ? "No classes assigned to you yet."
+                      : "No classes yet. Create one!",
+                  style: const TextStyle(color: Colors.grey),
+                ))
             : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
-                itemCount: _classes.length,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                itemCount: _classes.length +
+                    (widget.adminLevel == 1 ? 1 : 0),
                 itemBuilder: (context, index) {
-                  final classDoc = _classes[index];
+                  if (widget.adminLevel == 1 && index == 0) {
+                    return L1OrganizationPanel(
+                      classes: _classes,
+                      l1AdminId: widget.adminId,
+                    );
+                  }
+                  final classIndex =
+                      widget.adminLevel == 1 ? index - 1 : index;
+                  final classDoc = _classes[classIndex];
                   final data = classDoc.data;
                   final List<dynamic> studentIds =
                       data['studentIds'] as List<dynamic>? ?? [];
@@ -463,11 +653,24 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
                                       ),
+                                      ClassAssignmentChips(classData: data),
+                                      if (widget.adminLevel == 3) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          "${studentIds.length} member(s)",
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
                               ),
                             ),
+                            if (widget.adminLevel != 3)
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
@@ -488,6 +691,20 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 ),
                               ],
                             ),
+                            if (widget.adminLevel < 2)
+                              IconButton(
+                                tooltip: 'Assign Level 2 & 3 admins',
+                                icon: const Icon(Icons.manage_accounts_outlined,
+                                    color: Color(0xFF6A8A73), size: 22),
+                                onPressed: () {
+                                  showClassStaffAssignmentSheet(
+                                    context: context,
+                                    classDoc: classDoc,
+                                    l1AdminId: widget.adminId,
+                                    onSaved: _fetchClasses,
+                                  );
+                                },
+                              ),
                             const SizedBox(width: 4),
                             const Icon(Icons.chevron_right,
                                 color: Colors.grey, size: 18),
@@ -519,30 +736,141 @@ class _AdminHomePageState extends State<AdminHomePage> {
     final nameCtrl = TextEditingController();
     final codeCtrl = TextEditingController();
     Map<String, dynamic>? pendingBoundary;
+    String? selectedL3Id;
+    String? selectedL2Id;
+    List<models.Document> l3Admins = [];
+    List<models.Document> l2Admins = [];
+    bool adminsLoading = true;
+    bool adminsLoadStarted = false;
+    bool saving = false;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) => AlertDialog(
+        builder: (ctx, setSt) {
+          if (adminsLoading && !adminsLoadStarted) {
+            adminsLoadStarted = true;
+            if (_adminDepartment == null ||
+                _adminDepartment!.trim().isEmpty) {
+              // No department â€“ treat as no matching admins
+              setSt(() {
+                l3Admins = [];
+                l2Admins = [];
+                adminsLoading = false;
+              });
+            } else {
+              Future.wait([
+                AdminHierarchyService.listAdminsByLevel(
+                  3,
+                  department: _adminDepartment,
+                ),
+                AdminHierarchyService.listAdminsByLevel(
+                  2,
+                  department: _adminDepartment,
+                ),
+              ]).then((results) {
+                if (ctx.mounted) {
+                  setSt(() {
+                    l3Admins = results[0];
+                    l2Admins = results[1];
+                    adminsLoading = false;
+                  });
+                }
+              });
+            }
+          }
+          return AlertDialog(
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20)),
           title: const Text("Create Class",
               style: TextStyle(fontWeight: FontWeight.bold)),
-          content: Column(
+          content: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
+                onChanged: (_) => setSt(() {}),
                 decoration: const InputDecoration(
                     labelText: "Class Name (e.g. CS101)"),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: codeCtrl,
+                onChanged: (_) => setSt(() {}),
                 decoration: const InputDecoration(
                     labelText: "Join Code (e.g. CS101-2024)"),
               ),
               const SizedBox(height: 16),
+              if (adminsLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else ...[
+                DropdownButtonFormField<String?>(
+                  value: selectedL3Id,
+                  decoration: const InputDecoration(
+                    labelText: 'Class head (Level 3 admin)',
+                    helperText: 'Optional â€” manages this class',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('None'),
+                    ),
+                    ...l3Admins.map((doc) {
+                      final id = AdminHierarchyService.username(doc) ?? '';
+                      return DropdownMenuItem<String?>(
+                        value: id,
+                        child: Text(
+                          '${AdminHierarchyService.displayName(doc)} ($id)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (v) => setSt(() {
+                    selectedL3Id = v;
+                    if (v == null) selectedL2Id = null;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  value: selectedL2Id,
+                  decoration: InputDecoration(
+                    labelText: 'Level 2 supervisor',
+                    helperText: selectedL3Id == null
+                        ? 'Select a class head first'
+                        : 'Supervises the assigned Level 3 admin',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('None'),
+                    ),
+                    ...l2Admins.map((doc) {
+                      final id = AdminHierarchyService.username(doc) ?? '';
+                      return DropdownMenuItem<String?>(
+                        value: id,
+                        child: Text(
+                          '${AdminHierarchyService.displayName(doc)} ($id)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: selectedL3Id == null
+                      ? null
+                      : (v) => setSt(() => selectedL2Id = v),
+                ),
+                const SizedBox(height: 8),
+              ],
+              const SizedBox(height: 8),
               GestureDetector(
                 onTap: () async {
                   final result = await _openBoundaryPickerForCreate(
@@ -583,7 +911,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       Expanded(
                         child: Text(
                           pendingBoundary != null
-                              ? "Boundary set â€” ${(pendingBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
+                              ? "Boundary set Ã¢â‚¬â€ ${(pendingBoundary!['radiusMeters'] as num).toStringAsFixed(0)} m radius"
                               : "Set Boundary (required)",
                           style: TextStyle(
                             fontSize: 13,
@@ -607,44 +935,112 @@ class _AdminHomePageState extends State<AdminHomePage> {
               ),
             ],
           ),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text("Cancel"),
             ),
-            StatefulBuilder(
-              builder: (_, setBtn) => ElevatedButton(
+            ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6A8A73),
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: Colors.grey.shade300,
                 ),
-                onPressed: nameCtrl.text.isNotEmpty &&
-                        codeCtrl.text.isNotEmpty &&
-                        pendingBoundary != null
-                    ? () async {
-                        await AppwriteService.databases.createDocument(
-                          databaseId: '69ecebfb0033cf785741',
-                          collectionId: 'classes',
-                          documentId: ID.unique(),
-                          data: {
-                            'className': nameCtrl.text.trim(),
-                            'classCode': codeCtrl.text.trim(),
-                            'adminName': widget.adminName,
-                            'createdBy': widget.adminId,
-                            'studentIds': <String>[],
-                            'boundary': jsonEncode(pendingBoundary),
-                          },
-                        );
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        _fetchClasses();
-                      }
-                    : null,
-                child: const Text("Create"),
+                onPressed: saving ||
+                        codeCtrl.text.trim().isEmpty ||
+                        pendingBoundary == null
+                    ? null
+                    : () async {
+                        final code = codeCtrl.text.trim();
+                        final name = nameCtrl.text.trim().isNotEmpty
+                            ? nameCtrl.text.trim()
+                            : code;
+                        final headId = selectedL3Id;
+                        final supId = selectedL2Id;
+                        String? headName;
+                        String? supName;
+                        for (final doc in l3Admins) {
+                          if (AdminHierarchyService.username(doc) == headId) {
+                            headName = AdminHierarchyService.displayName(doc);
+                            break;
+                          }
+                        }
+                        for (final doc in l2Admins) {
+                          if (AdminHierarchyService.username(doc) == supId) {
+                            supName = AdminHierarchyService.displayName(doc);
+                            break;
+                          }
+                        }
+
+                        setSt(() => saving = true);
+                        try {
+                          final classId = ID.unique();
+                          await AppwriteService.databases.createDocument(
+                            databaseId: AppwriteService.databaseId,
+                            collectionId: 'classes',
+                            documentId: classId,
+                            data: {
+                              'className': name,
+                              'classCode': code,
+                              'adminName': widget.adminName,
+                              'createdBy': widget.adminId,
+                              'studentIds': <String>[],
+                              'boundary': jsonEncode(pendingBoundary),
+                            },
+                          );
+
+                          await AdminHierarchyService.persistClassAssignments(
+                            classDocId: classId,
+                            classData: {
+                              'boundary': jsonEncode(pendingBoundary),
+                            },
+                            l1AdminId: widget.adminId,
+                            headAdminId: headId,
+                            headAdminName: headName,
+                            supervisorId: supId,
+                            supervisorName: supName,
+                          );
+
+                          if (!ctx.mounted) return;
+                          Navigator.pop(ctx);
+                          await _fetchClasses();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Class "$name" created.'),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Could not create class: $e',
+                                ),
+                                backgroundColor: Colors.red.shade700,
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (ctx.mounted) setSt(() => saving = false);
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text("Create"),
               ),
-            ),
           ],
-        ),
+        );
+        },
       ),
     );
   }
@@ -849,7 +1245,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // ===========================================================================
-  // TAB 1 â€” GLOBAL LOGS
+  // TAB 1 Ã¢â‚¬â€ GLOBAL LOGS
   // ===========================================================================
   Widget _buildGlobalLogsTab() {
     if (_logsLoading) {
@@ -920,7 +1316,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     return Column(
       children: [
-        // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
           child: Row(
@@ -999,20 +1395,27 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
         ),
 
-        // â”€â”€ Class filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Class filter chips Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         _buildClassFilterChips(),
         const SizedBox(height: 8),
 
-        // â”€â”€ Log list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Log list Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         Expanded(
           child: logs.isEmpty
               ? const Center(
                   child: Text('No records found.',
                       style: TextStyle(color: Colors.grey)))
               : ListView.builder(
+                  controller: _logsScrollController,
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  itemCount: logs.length,
+                  itemCount: logs.length + (_isLoadingMoreLogs ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index == logs.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator(color: AppTheme.kGreen)),
+                      );
+                    }
                     final doc = logs[index];
                     final data = doc.data;
                     final isSelected =
@@ -1087,7 +1490,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     if (!confirm) return;
     for (final doc in toDelete) {
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: doc.$id,
         data: {'isHiddenFromAdmin': true},
@@ -1115,7 +1518,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       if (!confirm) return;
       for (final doc in logs) {
         await AppwriteService.databases.updateDocument(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'attendance_logs',
           documentId: doc.$id,
           data: {'isHiddenFromAdmin': true},
@@ -1180,7 +1583,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     if (!confirm) return;
                     for (final doc in byDay[day]!) {
                       await AppwriteService.databases.updateDocument(
-                        databaseId: '69ecebfb0033cf785741',
+                        databaseId: AppwriteService.databaseId,
                         collectionId: 'attendance_logs',
                         documentId: doc.$id,
                         data: {'isHiddenFromAdmin': true},
@@ -1277,7 +1680,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     return FutureBuilder<models.Document>(
       future: AppwriteService.databases.getDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         documentId: userId,
       ),
@@ -1395,7 +1798,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     // Fetch all non-hidden logs for this admin
     final logsSnapshot = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('createdBy', widget.adminId),
@@ -1439,7 +1842,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   // ===========================================================================
-  // TAB 2 â€” MORE / SETTINGS
+  // TAB 2 Ã¢â‚¬â€ MORE / SETTINGS
   // ===========================================================================
   Widget _buildMoreTab() {
     return ListView(
@@ -1582,13 +1985,207 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
   String get _classCode =>
       _classData['classCode'] as String? ?? widget.classId;
 
+  bool get _canEditBoundary => widget.adminLevel < 2;
+  bool get _canManageMembers => widget.adminLevel == 3;
+
+  Future<void> _removeStudentFromClass(String username) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Remove from class?',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(
+          'Remove $username from $_className? They can rejoin with the class code.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final ids = List<String>.from(
+      (_classData['studentIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString()),
+    );
+    ids.remove(username);
+
+    await AppwriteService.databases.updateDocument(
+      databaseId: AppwriteService.databaseId,
+      collectionId: 'classes',
+      documentId: widget.classId,
+      data: {'studentIds': ids},
+    );
+    if (mounted) {
+      setState(() => _classData['studentIds'] = ids);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$username removed from class.')),
+      );
+    }
+  }
+
+  Future<void> _toggleStudentSuspend(
+      models.Document userDoc, String username) async {
+    final isDisabled = userDoc.data['status'] == 'disabled';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('${isDisabled ? 'Unsuspend' : 'Suspend'} student?',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(
+          isDisabled
+              ? 'Restore login access for $username?'
+              : 'Suspend $username? They will not be able to log in until reactivated.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(isDisabled ? 'Unsuspend' : 'Suspend'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await AppwriteService.databases.updateDocument(
+      databaseId: AppwriteService.databaseId,
+      collectionId: 'users',
+      documentId: userDoc.$id,
+      data: {'status': isDisabled ? 'active' : 'disabled'},
+    );
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(isDisabled
+                ? 'Student reactivated.'
+                : 'Student suspended.')),
+      );
+    }
+  }
+
+  Future<void> _acceptStudent(Map<String, dynamic> student) async {
+    try {
+      final username = student['username'] as String?;
+      if (username == null || username.isEmpty) return;
+
+      // 1. Get the current boundary
+      final boundaryData = AdminHierarchyService.parseBoundaryRaw(_classData['boundary']);
+      
+      // 2. Remove the student from pendingStudents
+      final List<dynamic> pendingStudents = List.from(boundaryData['pendingStudents'] ?? []);
+      pendingStudents.removeWhere((s) => s['username'] == username);
+      boundaryData['pendingStudents'] = pendingStudents;
+
+      // 3. Add the student to studentIds
+      final List<String> studentIds = List<String>.from(
+        (_classData['studentIds'] as List<dynamic>? ?? [])
+            .map((e) => e.toString()),
+      );
+      if (!studentIds.contains(username)) {
+        studentIds.add(username);
+      }
+
+      // 4. Update the Appwrite document
+      await AppwriteService.databases.updateDocument(
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'classes',
+        documentId: widget.classId,
+        data: {
+          'boundary': jsonEncode(boundaryData),
+          'studentIds': studentIds,
+        },
+      );
+
+      // 5. Update local state
+      if (mounted) {
+        setState(() {
+          _classData['boundary'] = jsonEncode(boundaryData);
+          _classData['studentIds'] = studentIds;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Accepted ${student['name'] ?? username}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectStudent(Map<String, dynamic> student) async {
+    try {
+      final username = student['username'] as String?;
+      if (username == null || username.isEmpty) return;
+
+      // 1. Get the current boundary
+      final boundaryData = AdminHierarchyService.parseBoundaryRaw(_classData['boundary']);
+      
+      // 2. Remove from pendingStudents and record in rejectedStudents
+      final List<dynamic> pendingStudents = List.from(boundaryData['pendingStudents'] ?? []);
+      pendingStudents.removeWhere((s) => s['username'] == username);
+      boundaryData['pendingStudents'] = pendingStudents;
+
+      final List<dynamic> rejectedStudents = List.from(boundaryData['rejectedStudents'] ?? []);
+      if (!rejectedStudents.any((s) => s['username'] == username)) {
+        rejectedStudents.add({
+          'username': username,
+          'name': student['name'] ?? username,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+      }
+      boundaryData['rejectedStudents'] = rejectedStudents;
+
+      // 3. Update the Appwrite document
+      await AppwriteService.databases.updateDocument(
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'classes',
+        documentId: widget.classId,
+        data: {
+          'boundary': jsonEncode(boundaryData),
+        },
+      );
+
+      // 4. Update local state
+      if (mounted) {
+        setState(() {
+          _classData['boundary'] = jsonEncode(boundaryData);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Declined ${student['name'] ?? username}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+
   void _openBoundaryPicker() async {
-    final _rawBoundary = _classData['boundary'];
-    final Map<String, dynamic>? boundary = _rawBoundary is String && _rawBoundary.isNotEmpty
-        ? (jsonDecode(_rawBoundary) as Map<String, dynamic>)
-        : (_rawBoundary is Map<String, dynamic> ? _rawBoundary : null);
+    if (!_canEditBoundary) return;
+    final boundary = AdminHierarchyService.parseBoundaryRaw(_classData['boundary']);
     LatLng pos;
-    if (boundary != null) {
+    if (boundary.containsKey('lat') && boundary['lat'] != null) {
       pos = LatLng((boundary['lat'] as num).toDouble(),
           (boundary['lng'] as num).toDouble());
     } else {
@@ -1859,23 +2456,30 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                                 10)),
                                   ),
                                   onPressed: () async {
-                                    final newBoundary = {
+                                    final geo = {
                                       'lat': current.latitude,
                                       'lng': current.longitude,
                                       'radiusMeters': radius,
                                     };
+                                    final assignments =
+                                        AdminHierarchyService.readAssignments(
+                                            _classData);
+                                    final boundaryJson =
+                                        AdminHierarchyService
+                                            .encodeBoundaryWithAssignments(
+                                      geo,
+                                      assignments,
+                                    );
                                     await AppwriteService.databases
                                         .updateDocument(
-                                      databaseId: '69ecebfb0033cf785741',
+                                      databaseId: AppwriteService.databaseId,
                                       collectionId: 'classes',
                                       documentId: widget.classId,
-                                      data: {
-                                        'boundary': jsonEncode(newBoundary)
-                                      },
+                                      data: {'boundary': boundaryJson},
                                     );
                                     setState(() =>
                                         _classData['boundary'] =
-                                            newBoundary);
+                                            boundaryJson);
                                     if (mounted) {
                                       Navigator.pop(context);
                                       ScaffoldMessenger.of(context)
@@ -1935,7 +2539,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete all periods for this class
     final periodsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'periods',
       queries: [
         Query.equal('classId', widget.classId),
@@ -1944,7 +2548,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     );
     for (final doc in periodsSnap.documents) {
       await AppwriteService.databases.deleteDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'periods',
         documentId: doc.$id,
       );
@@ -1952,7 +2556,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete all attendance logs for this class
     final logsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('classId', widget.classId),
@@ -1961,7 +2565,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
     );
     for (final doc in logsSnap.documents) {
       await AppwriteService.databases.deleteDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: doc.$id,
       );
@@ -1969,7 +2573,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 
     // Delete the class document
     await AppwriteService.databases.deleteDocument(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'classes',
       documentId: widget.classId,
     );
@@ -1987,7 +2591,7 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
       await Permission.manageExternalStorage.request();
     }
     final logsSnapshot = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'attendance_logs',
       queries: [
         Query.equal('classId', widget.classId),
@@ -2134,71 +2738,116 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
                   children: [
-                    // --- BOUNDARY CARD ---
-                    _sectionCard(
-                      icon: Icons.my_location,
-                      title: "Class Boundary",
-                      trailing: hasBoundary
-                          ? _statusChip("Set", Colors.green)
-                          : _statusChip("Not Set", Colors.orange),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (hasBoundary &&
-                              _classData['boundary'] != null && _classData['boundary'].toString().isNotEmpty) ...[
-                            Builder(builder: (_) {
-                              final rawB = _classData['boundary'];
-                              final bMap = rawB is String
-                                  ? (jsonDecode(rawB) as Map<String, dynamic>)
-                                  : (rawB as Map<String, dynamic>? ?? {});
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Lat: ${(bMap['lat'] as num).toStringAsFixed(5)},  "
-                                    "Lng: ${(bMap['lng'] as num).toStringAsFixed(5)}",
-                                    style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontSize: 12,
-                                        fontFamily: 'Courier'),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    "Radius: ${(bMap['radiusMeters'] as num).toStringAsFixed(0)} m",
-                                    style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontSize: 12),
-                                  ),
-                                ],
-                              );
-                            }),
-                            const SizedBox(height: 12),
-                          ],
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              icon: Icon(hasBoundary
-                                  ? Icons.edit_location_alt
-                                  : Icons.add_location_alt),
-                              label: Text(hasBoundary
-                                  ? "Edit Boundary"
-                                  : "Set Boundary"),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    const Color(0xFF6A8A73),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(10)),
+                    if (_canEditBoundary) ...[
+                      _sectionCard(
+                        icon: Icons.my_location,
+                        title: "Class Boundary",
+                        trailing: hasBoundary
+                            ? _statusChip("Set", Colors.green)
+                            : _statusChip("Not Set", Colors.orange),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (hasBoundary &&
+                                _classData['boundary'] != null &&
+                                _classData['boundary'].toString().isNotEmpty) ...[
+                              Builder(builder: (_) {
+                                final geo = AdminHierarchyService.geoFromBoundary(
+                                    _classData['boundary']);
+                                if (geo['lat'] == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Lat: ${(geo['lat'] as num).toStringAsFixed(5)},  "
+                                      "Lng: ${(geo['lng'] as num).toStringAsFixed(5)}",
+                                      style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 12,
+                                          fontFamily: 'Courier'),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "Radius: ${(geo['radiusMeters'] as num).toStringAsFixed(0)} m",
+                                      style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 12),
+                                    ),
+                                  ],
+                                );
+                              }),
+                              const SizedBox(height: 12),
+                            ],
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                icon: Icon(hasBoundary
+                                    ? Icons.edit_location_alt
+                                    : Icons.add_location_alt),
+                                label: Text(hasBoundary
+                                    ? "Edit Boundary"
+                                    : "Set Boundary"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6A8A73),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: _openBoundaryPicker,
                               ),
-                              onPressed: _openBoundaryPicker,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    Builder(
+                      builder: (context) {
+                        final boundaryData = AdminHierarchyService.parseBoundaryRaw(_classData['boundary']);
+                        final List<dynamic> pendingStudents = boundaryData['pendingStudents'] ?? [];
+                        
+                        if (pendingStudents.isEmpty) return const SizedBox.shrink();
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _sectionCard(
+                            icon: Icons.person_add_alt_1_outlined,
+                            title: "Pending Applications",
+                            trailing: _statusChip("${pendingStudents.length}", Colors.orange),
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: pendingStudents.length,
+                              separatorBuilder: (_, __) => const Divider(),
+                              itemBuilder: (ctx, i) {
+                                final s = Map<String, dynamic>.from(pendingStudents[i] as Map);
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(s['name'] ?? s['username']),
+                                  subtitle: Text(s['username'], style: const TextStyle(fontSize: 12)),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.check_circle, color: Colors.green),
+                                        onPressed: () => _acceptStudent(s),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.cancel, color: Colors.red),
+                                        onPressed: () => _rejectStudent(s),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                           ),
-                        ],
-                      ),
+                        );
+                      }
                     ),
-
-                    const SizedBox(height: 16),
 
                     // --- STUDENTS CARD ---
                     Container(
@@ -2248,68 +2897,12 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
                                       style: TextStyle(
                                           color: Colors.grey,
                                           fontSize: 13))
-                                  : FutureBuilder<models.DocumentList>(
-                                      future: AppwriteService.databases
-                                          .listDocuments(
-                                        databaseId: '69ecebfb0033cf785741',
-                                        collectionId: 'users',
-                                        queries: [
-                                          Query.equal('\$id',
-                                              studentIds.cast<String>())
-                                        ],
-                                      ),
-                                      builder: (context, snap) {
-                                        if (!snap.hasData) {
-                                          return const Center(
-                                              child:
-                                                  CircularProgressIndicator(
-                                                      color: Color(
-                                                          0xFF6A8A73)));
-                                        }
-                                        return Container(
-                                          constraints:
-                                              const BoxConstraints(
-                                                  maxHeight: 300),
-                                          child: ListView(
-                                            shrinkWrap: true,
-                                            children: snap
-                                                .data!.documents
-                                                .map((s) {
-                                              final sd = s.data;
-                                              return ListTile(
-                                                contentPadding:
-                                                    EdgeInsets.zero,
-                                                dense: true,
-                                                leading:
-                                                    const CircleAvatar(
-                                                  radius: 18,
-                                                  backgroundColor:
-                                                      Color(0xFFF1F4F2),
-                                                  child: Icon(
-                                                      Icons.person,
-                                                      color: Color(
-                                                          0xFF6A8A73),
-                                                      size: 16),
-                                                ),
-                                                title: Text(
-                                                    sd['name'] as String? ??
-                                                        "Unknown",
-                                                    style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight
-                                                                .w600,
-                                                        fontSize: 13)),
-                                                subtitle: Text(
-                                                    "ID: ${sd['username'] as String? ?? s.$id}",
-                                                    style:
-                                                        const TextStyle(
-                                                            fontSize:
-                                                                11)),
-                                              );
-                                            }).toList(),
-                                          ),
-                                        );
-                                      },
+                                  : _ClassMembersList(
+                                      studentIds:
+                                          studentIds.cast<String>(),
+                                      canManage: _canManageMembers,
+                                      onRemove: _removeStudentFromClass,
+                                      onToggleSuspend: _toggleStudentSuspend,
                                     ),
                             ),
                           ],
@@ -2392,7 +2985,147 @@ class _ClassManagementPageState extends State<ClassManagementPage> {
 }
 
 // =============================================================================
-// _PeriodsManagementSection â€” already on Appwrite, preserved as-is
+// _ClassMembersList â€” student roster with optional L3 management actions
+// =============================================================================
+class _ClassMembersList extends StatelessWidget {
+  final List<String> studentIds;
+  final bool canManage;
+  final Future<void> Function(String username) onRemove;
+  final Future<void> Function(models.Document userDoc, String username)
+      onToggleSuspend;
+
+  const _ClassMembersList({
+    required this.studentIds,
+    required this.canManage,
+    required this.onRemove,
+    required this.onToggleSuspend,
+  });
+
+  Future<List<models.Document>> _loadStudents() async {
+    final docs = <models.Document>[];
+    for (final id in studentIds) {
+      final user = await AdminHierarchyService.findUserByUsername(id);
+      if (user != null) docs.add(user);
+    }
+    docs.sort((a, b) {
+      final na = a.data['name'] as String? ?? '';
+      final nb = b.data['name'] as String? ?? '';
+      return na.compareTo(nb);
+    });
+    return docs;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<models.Document>>(
+      future: _loadStudents(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF6A8A73)),
+          );
+        }
+        if (!snap.hasData || snap.data!.isEmpty) {
+          return const Text(
+            'No students enrolled yet.',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          );
+        }
+
+        return Container(
+          constraints: const BoxConstraints(maxHeight: 360),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: snap.data!.length,
+            separatorBuilder: (_, __) => Divider(
+              height: 1,
+              color: Colors.grey.shade200,
+            ),
+            itemBuilder: (context, i) {
+              final s = snap.data![i];
+              final sd = s.data;
+              final username = sd['username'] as String? ?? '';
+              final isSuspended = sd['status'] == 'disabled';
+
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: UserAvatar(
+                  profilePictureId: sd['profilePictureId'] as String?,
+                  fallbackName: sd['name'] as String? ?? 'Unknown',
+                  radius: 18,
+                  backgroundColor: isSuspended ? Colors.red.shade50 : const Color(0xFFF1F4F2),
+                  foregroundColor: isSuspended ? Colors.red : const Color(0xFF6A8A73),
+                ),
+                title: Text(
+                  sd['name'] as String? ?? 'Unknown',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: isSuspended ? Colors.grey : Colors.black,
+                  ),
+                ),
+                subtitle: Text(
+                  'ID: $username${isSuspended ? ' â€¢ Suspended' : ''}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isSuspended ? Colors.red.shade400 : null,
+                  ),
+                ),
+                trailing: canManage
+                    ? PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, size: 20),
+                        onSelected: (value) {
+                          if (value == 'remove') {
+                            onRemove(username);
+                          } else if (value == 'suspend') {
+                            onToggleSuspend(s, username);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: 'suspend',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSuspended
+                                      ? Icons.check_circle_outline
+                                      : Icons.block,
+                                  size: 18,
+                                  color: isSuspended
+                                      ? Colors.green
+                                      : Colors.orange,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(isSuspended ? 'Unsuspend' : 'Suspend'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'remove',
+                            child: Row(
+                              children: [
+                                Icon(Icons.person_remove,
+                                    size: 18, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text('Remove from class'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : null,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// =============================================================================
+// _PeriodsManagementSection Ã¢â‚¬â€ already on Appwrite, preserved as-is
 // =============================================================================
 class _PeriodsManagementSection extends StatefulWidget {
   final String classId;
@@ -2441,19 +3174,19 @@ class _PeriodsManagementSectionState
 
     if (confirm == true) {
       final logsSnap = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         queries: [Query.equal('periodId', pId)],
       );
       for (final doc in logsSnap.documents) {
         await AppwriteService.databases.deleteDocument(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'attendance_logs',
           documentId: doc.$id,
         );
       }
       await AppwriteService.databases.deleteDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'periods',
         documentId: pId,
       );
@@ -2531,7 +3264,7 @@ class _PeriodsManagementSectionState
     }
 
     final periodsSnap = await AppwriteService.databases.listDocuments(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'periods',
       queries: [Query.equal('classId', widget.classId)],
     );
@@ -2561,7 +3294,7 @@ class _PeriodsManagementSectionState
 
     final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
     await AppwriteService.databases.createDocument(
-      databaseId: '69ecebfb0033cf785741',
+      databaseId: AppwriteService.databaseId,
       collectionId: 'periods',
       documentId: ID.unique(),
       data: {
@@ -2606,8 +3339,7 @@ class _PeriodsManagementSectionState
                   style: TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 15)),
               const Spacer(),
-              if (widget.adminLevel < 3)
-                ElevatedButton.icon(
+              ElevatedButton.icon(
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text("Add"),
                   style: ElevatedButton.styleFrom(
@@ -2626,7 +3358,7 @@ class _PeriodsManagementSectionState
           const SizedBox(height: 14),
           FutureBuilder<models.DocumentList>(
             future: AppwriteService.databases.listDocuments(
-              databaseId: '69ecebfb0033cf785741',
+              databaseId: AppwriteService.databaseId,
               collectionId: 'periods',
               queries: [
                 Query.equal('classId', widget.classId),
@@ -2748,7 +3480,7 @@ class _PeriodsManagementSectionState
 }
 
 // =============================================================================
-// PeriodAttendancePage â€” already on Appwrite, preserved as-is
+// PeriodAttendancePage Ã¢â‚¬â€ already on Appwrite, preserved as-is
 // =============================================================================
 class PeriodAttendancePage extends StatefulWidget {
   final String classId;
@@ -2791,7 +3523,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
       String studentId, String? logDocId, String status) async {
     if (logDocId != null) {
       await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: logDocId,
         data: {
@@ -2801,7 +3533,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
       );
     } else {
       await AppwriteService.databases.createDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: ID.unique(),
         data: {
@@ -2927,7 +3659,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
         ),
         body: FutureBuilder<models.DocumentList>(
           future: AppwriteService.databases.listDocuments(
-            databaseId: '69ecebfb0033cf785741',
+            databaseId: AppwriteService.databaseId,
             collectionId: 'attendance_logs',
             queries: [Query.equal('periodId', widget.periodId)],
           ),
@@ -2963,7 +3695,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
 
             return TabBarView(
               children: [
-                // â”€â”€ Reported â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // Ã¢â€â‚¬Ã¢â€â‚¬ Reported Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
                 reported.isEmpty
                     ? const Center(
                         child: Text(
@@ -2997,7 +3729,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
                           return FutureBuilder<models.Document>(
                             future: AppwriteService.databases
                                 .getDocument(
-                              databaseId: '69ecebfb0033cf785741',
+                              databaseId: AppwriteService.databaseId,
                               collectionId: 'users',
                               documentId: studentId,
                             ),
@@ -3100,7 +3832,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
                         },
                       ),
 
-                // â”€â”€ Not Reported â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // Ã¢â€â‚¬Ã¢â€â‚¬ Not Reported Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
                 notReported.isEmpty
                     ? const Center(
                         child: Text("All students have reported.",
@@ -3114,7 +3846,7 @@ class _PeriodAttendancePageState extends State<PeriodAttendancePage> {
                           return FutureBuilder<models.Document>(
                             future: AppwriteService.databases
                                 .getDocument(
-                              databaseId: '69ecebfb0033cf785741',
+                              databaseId: AppwriteService.databaseId,
                               collectionId: 'users',
                               documentId: studentId,
                             ),
@@ -3229,3 +3961,5 @@ class _StatusBtn extends StatelessWidget {
     );
   }
 }
+
+

@@ -1,8 +1,10 @@
-﻿import 'dart:async'; // Required for Splash Screen Timer
+import 'dart:async'; // Required for Splash Screen Timer
+import 'package:flutter/services.dart';
+import 'forgot_password_page.dart';
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'register_page.dart';
-import 'admin_login.dart';
+import 'admin_level_select_page.dart';
 import 'dean_login.dart';
 import 'app_theme.dart';
 import 'package:appwrite/appwrite.dart';
@@ -215,21 +217,28 @@ class _LoginPageState extends State<LoginPage> {
       final uniqueCode = uniqueCodeController.text.trim();
       final password = passwordController.text.trim();
 
+      // Query by username only — password verified client-side for dual-mode support
       final response = await AppwriteService.databases.listDocuments(
-  databaseId: '69ecebfb0033cf785741',
-  collectionId: 'users',
-  queries: [
-    Query.equal('username', uniqueCode),
-    Query.equal('password', password),
-  ],
-);
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'users',
+        queries: [
+          Query.equal('username', uniqueCode),
+        ],
+      );
 
-if (response.documents.isEmpty) {
-  _dismissDialogAndShow(statusText, "Invalid credentials.");
-  return;
-}
+      if (response.documents.isEmpty) {
+        _dismissDialogAndShow(statusText, "Invalid credentials.");
+        return;
+      }
 
-final data = response.documents.first.data;
+      // Dual-mode password verification (supports plaintext legacy + hashed)
+      final storedPassword = response.documents.first.data['password'] as String? ?? '';
+      if (!AppwriteService.verifyPassword(password, storedPassword)) {
+        _dismissDialogAndShow(statusText, "Invalid credentials.");
+        return;
+      }
+
+      final data = response.documents.first.data;
 
       // RBAC Security Check
       final role = data['role'] as String?;
@@ -241,16 +250,31 @@ final data = response.documents.first.data;
         return;
       }
 
+      // Admin Validation Check
+      final status = data['status'] as String?;
+      if (status == 'pending') {
+        _dismissDialogAndShow(
+          statusText,
+          "Your account validation is pending from the admin. Please try again later.",
+        );
+        return;
+      }
+
       statusText.value = "Finalizing...";
 
+      // Auto-upgrade plaintext password to hashed on successful login
+      final updateData = <String, dynamic>{
+        'lastLogin': DateTime.now().toIso8601String(),
+      };
+      if (!AppwriteService.isHashed(storedPassword)) {
+        updateData['password'] = AppwriteService.hashPassword(password);
+      }
       await AppwriteService.databases.updateDocument(
-  databaseId: '69ecebfb0033cf785741',
-  collectionId: 'users',
-  documentId: response.documents.first.$id,
-  data: {
-    'lastLogin': DateTime.now().toIso8601String(),
-  },
-);
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'users',
+        documentId: response.documents.first.$id,
+        data: updateData,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -288,250 +312,279 @@ final data = response.documents.first.data;
       backgroundColor: AppTheme.kDark,
       body: SafeArea(
         bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  GestureDetector(
-                    onTap: _handleSecretTap,
-                    child: const Text(
-                      "upasthiti",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AdminLoginPage()),
-                    ),
-                    icon: const Icon(
-                      Icons.admin_panel_settings_outlined,
-                      color: Colors.white70,
-                      size: 18,
-                    ),
-                    label: const Text(
-                      "ADMIN",
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Welcome Back", style: AppTheme.headingWhite),
-                  SizedBox(height: 8),
-                  Text(
-                    "Verify your unique code and identity.",
-                    style: AppTheme.subheadingGrey,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 30),
-            Expanded(
-              child: RisingSheet(
-                child: Container(
-                  width: double.infinity,
-                  decoration: AppTheme.bottomSheet,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        AppTheme.sheetHandle,
-                        TextFormField(
-                          controller: uniqueCodeController,
-                          textInputAction: TextInputAction.next,
-                          decoration: AppTheme.inputDecoration(
-                            "Unique Code",
-                            Icons.badge_outlined,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: passwordController,
-                          obscureText: _isObscure,
-                          textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) => _login(),
-                          decoration: AppTheme.inputDecoration(
-                            "Password",
-                            Icons.lock_outline,
-                            suffix: IconButton(
-                              icon: Icon(
-                                _isObscure
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                                color: Colors.grey,
-                                size: 20,
-                              ),
-                              onPressed: () =>
-                                  setState(() => _isObscure = !_isObscure),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 58,
-                          child: ElevatedButton(
-                            onPressed: _login,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.kGreen,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text(
-                              "Sign In",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 25),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
+                ),
+                child: IntrinsicHeight(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
-                              "First day at work? ",
-                              style: TextStyle(color: Colors.grey),
-                            ),
                             GestureDetector(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const RegisterPage(),
+                              onTap: _handleSecretTap,
+                              child: const Text(
+                                "upasthiti",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  letterSpacing: 1.2,
                                 ),
                               ),
-                              child: const Text(
-                                "Register here",
+                            ),
+                            TextButton.icon(
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const AdminLevelSelectPage()),
+                              ),
+                              icon: const Icon(
+                                Icons.admin_panel_settings_outlined,
+                                color: Colors.white70,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                "ADMIN",
                                 style: TextStyle(
-                                  color: AppTheme.kGreen,
+                                  color: Colors.white70,
                                   fontWeight: FontWeight.bold,
+                                  fontSize: 12,
                                 ),
                               ),
                             ),
                           ],
                         ),
-
-                        // --- PNG EFFECT LOGO FOOTER ---
-                        const SizedBox(height: 50),
-                        Center(
-                          child: RepaintBoundary(
-                            child: Opacity(
-                              opacity: 0.6,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFF6A8A73,
-                                          ).withValues(alpha: 0.15),
-                                          blurRadius: 20,
-                                          spreadRadius: 2,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Welcome Back", style: AppTheme.headingWhite),
+                            const SizedBox(height: 8),
+                            Text(
+                              "Verify your unique code and identity.",
+                              style: AppTheme.subheadingGrey,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                      Expanded(
+                        child: RisingSheet(
+                          child: Container(
+                            width: double.infinity,
+                            decoration: AppTheme.bottomSheet,
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              children: [
+                                AppTheme.sheetHandle,
+                                TextFormField(
+                                  controller: uniqueCodeController,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: AppTheme.inputDecoration(
+                                    "Unique Code",
+                                    Icons.badge_outlined,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: passwordController,
+                                  obscureText: _isObscure,
+                                  textInputAction: TextInputAction.done,
+                                  onFieldSubmitted: (_) => _login(),
+                                  decoration: AppTheme.inputDecoration(
+                                    "Password",
+                                    Icons.lock_outline,
+                                    suffix: IconButton(
+                                      icon: Icon(
+                                        _isObscure
+                                            ? Icons.visibility_off_outlined
+                                            : Icons.visibility_outlined,
+                                        color: Colors.grey,
+                                        size: 20,
+                                      ),
+                                      onPressed: () =>
+                                          setState(() => _isObscure = !_isObscure),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const ForgotPasswordPage(),
                                         ),
-                                      ],
-                                    ),
-                                    child: ColorFiltered(
-                                      colorFilter: ColorFilter.mode(
-                                        const Color(
-                                          0xFF6A8A73,
-                                        ).withValues(alpha: 0.1),
-                                        BlendMode.srcATop,
-                                      ),
-                                      child: Image.asset(
-                                        'assets/upasthiti.png',
-                                        width: 90,
-                                        fit: BoxFit.contain,
+                                      );
+                                    },
+                                    child: const Text(
+                                      "Forgot Password?",
+                                      style: TextStyle(
+                                        color: AppTheme.kGreen,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    "POWERED BY upasthiti",
-                                    style: TextStyle(
-                                      color: const Color(
-                                        0xFF6A8A73,
-                                      ).withValues(alpha: 0.8),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.5,
+                                ),
+                                const SizedBox(height: 24),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 58,
+                                  child: ElevatedButton(
+                                    onPressed: _login,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.kGreen,
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      "Sign In",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(height: 25),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      "First day at work? ",
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const RegisterPage(),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Register here",
+                                        style: TextStyle(
+                                          color: AppTheme.kGreen,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 50),
+                                Center(
+                                  child: RepaintBoundary(
+                                    child: Opacity(
+                                      opacity: 0.6,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(
+                                                    0xFF6A8A73,
+                                                  ).withValues(alpha: 0.15),
+                                                  blurRadius: 20,
+                                                  spreadRadius: 2,
+                                                ),
+                                              ],
+                                            ),
+                                            child: ColorFiltered(
+                                              colorFilter: ColorFilter.mode(
+                                                const Color(
+                                                  0xFF6A8A73,
+                                                ).withValues(alpha: 0.1),
+                                                BlendMode.srcATop,
+                                              ),
+                                              child: Image.asset(
+                                                'assets/upasthiti.png',
+                                                width: 90,
+                                                fit: BoxFit.contain,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            "POWERED BY upasthiti",
+                                            style: TextStyle(
+                                              color: const Color(
+                                                0xFF6A8A73,
+                                              ).withValues(alpha: 0.8),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 1.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 40),
+                                if (_secretTapCount >= 5)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 20),
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const DeanLoginPage(),
+                                          ),
+                                        );
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF1A1C29),
+                                        foregroundColor: const Color(
+                                          0xFFD4AF37,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 20,
+                                          vertical: 12,
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.shield, size: 16),
+                                      label: const Text(
+                                        "Super Admin Portal",
+                                        style: TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(height: 20),
+                              ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 40),
-
-                        // HIDDEN DEAN LOGIN BUTTON
-                        if (_secretTapCount >= 5)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const DeanLoginPage(),
-                                  ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1A1C29),
-                                foregroundColor: const Color(
-                                  0xFFD4AF37,
-                                ), // Gold
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 12,
-                                ),
-                              ),
-                              icon: const Icon(Icons.shield, size: 16),
-                              label: const Text(
-                                "Super Admin Portal",
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-
-                        const SizedBox(height: 20),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 }
+

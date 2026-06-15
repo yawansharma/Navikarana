@@ -3,7 +3,7 @@ import 'package:appwrite/models.dart' as models;
 import 'appwrite_service.dart';
 
 class LeaveService {
-  static const String databaseId = '69ecebfb0033cf785741';
+  static String get databaseId => AppwriteService.databaseId;
   static const String collectionId = 'leave_requests';
 
   static Future<models.Document> submitRequest({
@@ -70,3 +70,5 @@ class LeaveService {
     );
   }
 }
+
+

@@ -30,7 +30,7 @@ class _DeanDistributionTabState extends State<DeanDistributionTab> {
     super.initState();
     _fetchEvents();
     _sub = AppwriteService.realtime.subscribe(
-        ['databases.69ecebfb0033cf785741.collections.distribution_events.documents']);
+        ['databases.${AppwriteService.databaseId}.collections.distribution_events.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchEvents();
     });
@@ -265,7 +265,7 @@ class _DeanDistributionTabState extends State<DeanDistributionTab> {
         final date = d['scheduledDate'] != null
             ? DateFormat('MMM dd, yyyy')
                 .format(DateTime.parse(d['scheduledDate'] as String))
-            : '—';
+            : 'â€”';
 
         return GestureDetector(
           onTap: () => _showEventDetail(doc),
@@ -413,7 +413,7 @@ class _DeanDistributionTabState extends State<DeanDistributionTab> {
 }
 
 // =============================================================================
-// Event Detail Sheet — stateful sub-widget
+// Event Detail Sheet â€” stateful sub-widget
 // =============================================================================
 
 class _EventDetailSheet extends StatefulWidget {
@@ -590,7 +590,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
       try {
         // Look up the user's display name
         final userQuery = await AppwriteService.databases.listDocuments(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'users',
           queries: [Query.equal('username', uid), Query.limit(1)],
         );
@@ -673,7 +673,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                       // Merged and deduplicated client-side (no FTS index needed)
                       final byName = await AppwriteService.databases
                           .listDocuments(
-                        databaseId: '69ecebfb0033cf785741',
+                        databaseId: AppwriteService.databaseId,
                         collectionId: 'users',
                         queries: [
                           Query.startsWith('name', q.trim()),
@@ -682,7 +682,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                       );
                       final byId = await AppwriteService.databases
                           .listDocuments(
-                        databaseId: '69ecebfb0033cf785741',
+                        databaseId: AppwriteService.databaseId,
                         collectionId: 'users',
                         queries: [
                           Query.startsWith('username', q.trim()),
@@ -716,10 +716,10 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                             r.data['userId'] == u['username']);
                         return ListTile(
                           dense: true,
-                          title: Text(u['name'] as String? ?? '—',
+                          title: Text(u['name'] as String? ?? 'â€”',
                               style: GoogleFonts.poppins(fontSize: 13)),
                           subtitle: Text(
-                              u['username'] as String? ?? '—',
+                              u['username'] as String? ?? 'â€”',
                               style: GoogleFonts.poppins(fontSize: 11)),
                           trailing: alreadyAdded
                               ? const Icon(Icons.check_circle,
@@ -782,7 +782,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
             Future(() async {
               try {
                 final r = await AppwriteService.databases.listDocuments(
-                  databaseId: '69ecebfb0033cf785741',
+                  databaseId: AppwriteService.databaseId,
                   collectionId: 'users',
                   queries: [Query.equal('role', 'admin'), Query.limit(50)],
                 );
@@ -841,11 +841,11 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                                         fontSize: 12),
                                   ),
                                 ),
-                                title: Text(u['name'] as String? ?? '—',
+                                title: Text(u['name'] as String? ?? 'â€”',
                                     style:
                                         GoogleFonts.poppins(fontSize: 13)),
                                 subtitle: Text(
-                                    "Level ${u['level'] ?? '—'}",
+                                    "Level ${u['level'] ?? 'â€”'}",
                                     style:
                                         GoogleFonts.poppins(fontSize: 11)),
                                 trailing: alreadyAssigned
@@ -936,7 +936,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                     final timeStr = ts != null
                         ? DateFormat('MMM dd, HH:mm')
                             .format(DateTime.parse(ts).toLocal())
-                        : '—';
+                        : 'â€”';
                     final actionColor = {
                       'issued': Colors.green,
                       'duplicate_attempt': Colors.orange,
@@ -961,13 +961,13 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  l['scannedUserId'] as String? ?? '—',
+                                  l['scannedUserId'] as String? ?? 'â€”',
                                   style: GoogleFonts.poppins(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600),
                                 ),
                                 Text(
-                                  "$action • $timeStr",
+                                  "$action â€¢ $timeStr",
                                   style: GoogleFonts.poppins(
                                       fontSize: 10,
                                       color: Colors.grey.shade500),
@@ -1100,10 +1100,10 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                                 ),
                               ),
                               title: Text(
-                                  a.data['adminName'] as String? ?? '—',
+                                  a.data['adminName'] as String? ?? 'â€”',
                                   style: GoogleFonts.poppins(fontSize: 13)),
                               subtitle: Text(
-                                  a.data['adminId'] as String? ?? '—',
+                                  a.data['adminId'] as String? ?? 'â€”',
                                   style: GoogleFonts.poppins(fontSize: 11)),
                               trailing: status != 'closed'
                                   ? IconButton(
@@ -1146,10 +1146,10 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                               dense: true,
                               leading: _recipientStatusIcon(rStatus),
                               title: Text(
-                                  r.data['userName'] as String? ?? '—',
+                                  r.data['userName'] as String? ?? 'â€”',
                                   style: GoogleFonts.poppins(fontSize: 13)),
                               subtitle: Text(
-                                  r.data['userId'] as String? ?? '—',
+                                  r.data['userId'] as String? ?? 'â€”',
                                   style: GoogleFonts.poppins(fontSize: 11)),
                               trailing: rStatus == 'pending' &&
                                       status != 'closed'
@@ -1476,3 +1476,5 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
     );
   }
 }
+
+

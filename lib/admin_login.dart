@@ -1,15 +1,28 @@
-﻿import 'dart:math'; // For Random Captcha
+import 'dart:math'; // For Random Captcha
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
-import 'package:appwrite/models.dart' as models;
-
-import 'admin_home_page.dart'; 
-import 'main.dart'; // Import main to navigate back to User Login
+import 'admin_home_page.dart';
+import 'office_admin_home_page.dart';
+import 'event_admin_home_page.dart';
+import 'hr_admin_home_page.dart';
+import 'security_admin_home_page.dart';
 import 'app_theme.dart';
 import 'services/appwrite_service.dart'; // Make sure this path is correct for your project
 
 class AdminLoginPage extends StatefulWidget {
-  const AdminLoginPage({super.key});
+  /// The level this login portal is restricted to (1, 2, or 3).
+  /// Pass isOfficeAdmin: true for the Office Admin portal — requiredLevel is ignored.
+  /// Pass specialRole to route to Event/HR/Security admin portals.
+  final int requiredLevel;
+  final bool isOfficeAdmin;
+  final String? specialRole; // 'eventAdmin' | 'hrAdmin' | 'securityAdmin'
+
+  const AdminLoginPage({
+    super.key,
+    this.requiredLevel = 0,
+    this.isOfficeAdmin = false,
+    this.specialRole,
+  });
 
   @override
   State<AdminLoginPage> createState() => _AdminLoginPageState();
@@ -20,6 +33,46 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
   final passwordController = TextEditingController();
   final captchaController = TextEditingController();
   bool _isObscure = true;
+
+  // ── Derived helpers ────────────────────────────────────────────────────────
+  bool get _isSpecialRole => widget.isOfficeAdmin || widget.specialRole != null;
+
+  Color get _roleColor {
+    if (widget.isOfficeAdmin) return const Color(0xFF8A6A6A);
+    switch (widget.specialRole) {
+      case 'eventAdmin': return const Color(0xFF3D6B8A);
+      case 'hrAdmin': return const Color(0xFF8A7A2A);
+      case 'securityAdmin': return const Color(0xFF8A2A2A);
+      default: return AppTheme.kGreen;
+    }
+  }
+
+  String get _badgeLabel {
+    if (widget.isOfficeAdmin) return "OFFICE ADMIN";
+    switch (widget.specialRole) {
+      case 'eventAdmin': return "EVENT ADMIN";
+      case 'hrAdmin': return "HR ADMIN";
+      case 'securityAdmin': return "SECURITY ADMIN";
+      default: return "LEVEL ${widget.requiredLevel}";
+    }
+  }
+
+  String get _portalTitle {
+    if (widget.isOfficeAdmin) return "Office Admin Portal";
+    switch (widget.specialRole) {
+      case 'eventAdmin': return "Event Admin Portal";
+      case 'hrAdmin': return "HR Admin Portal";
+      case 'securityAdmin': return "Security Admin Portal";
+      default: return "Level ${widget.requiredLevel} Portal";
+    }
+  }
+
+  String get _portalSubtitle {
+    if (_isSpecialRole) {
+      return "${_portalTitle.replaceAll(' Portal', '')} credentials only.";
+    }
+    return "Only Level ${widget.requiredLevel} credentials are accepted here.";
+  }
 
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
@@ -104,13 +157,12 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     );
 
     try {
-      // Use Appwrite query instead of Firestore
+      // Query by username only — password verified client-side for dual-mode support
       final query = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'users',
         queries: [
           Query.equal('username', adminId),
-          Query.equal('password', password),
         ],
       );
 
@@ -123,45 +175,155 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
       final doc = query.documents.first;
       final data = doc.data;
 
-      // RBAC Security Check
+      // Dual-mode password verification (supports plaintext legacy + hashed)
+      final storedPassword = data['password'] as String? ?? '';
+      if (!AppwriteService.verifyPassword(password, storedPassword)) {
+        _dismissAndShowError("Invalid Admin ID or Password");
+        _generateCaptcha();
+        return;
+      }
+
       final role = data['role'] as String?;
-      if (role != 'admin' && role != 'dean') {
-        _dismissAndShowError("Unauthorized access. This portal is for Administrators only.");
-        _generateCaptcha();
-        return;
-      }
-
-      // Check account status
-      if (data['status'] == 'disabled') {
-        _dismissAndShowError("Your admin account has been disabled. Please contact the Dean.");
-        _generateCaptcha();
-        return;
-      }
-
-      statusText.value = "Finalizing...";
-
-      // Update last login using ISO-8601 instead of FieldValue.serverTimestamp()
-      await AppwriteService.databases.updateDocument(
-        databaseId: '69ecebfb0033cf785741',
-        collectionId: 'users',
-        documentId: doc.$id,
-        data: {
-          'lastLogin': DateTime.now().toIso8601String(),
-        },
-      );
-
-      if (!mounted) return;
-      Navigator.of(context).pop();
-
       final adminName = data['name'] ?? adminId;
-      final adminLevel = data['level'] is int ? data['level'] as int : 1;
-      Navigator.pushReplacement(context, MaterialPageRoute(
-          builder: (_) => AdminHomePage(
-              adminName: adminName,
-              adminId: adminId,
-              adminLevel: adminLevel,
+
+      if (widget.isOfficeAdmin) {
+        if (role != 'officeAdmin') {
+          _dismissAndShowError("Unauthorized. This portal is for Office Admins only.");
+          _generateCaptcha();
+          return;
+        }
+        if (data['status'] == 'disabled') {
+          _dismissAndShowError("Your account has been disabled. Please contact administration.");
+          _generateCaptcha();
+          return;
+        }
+        statusText.value = "Finalizing...";
+        // Auto-upgrade plaintext password to hashed
+        final updateData = <String, dynamic>{
+          'lastLogin': DateTime.now().toIso8601String(),
+        };
+        if (!AppwriteService.isHashed(storedPassword)) {
+          updateData['password'] = AppwriteService.hashPassword(password);
+        }
+        await AppwriteService.databases.updateDocument(
+          databaseId: AppwriteService.databaseId,
+          collectionId: 'users',
+          documentId: doc.$id,
+          data: updateData,
+        );
+        // Trigger lazy background cleanup of old accounts
+        AppwriteService.cleanupInactiveAccounts();
+        
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        final adminDepartment = data['department'] as String? ?? '';
+        Navigator.pushReplacement(context, MaterialPageRoute(
+          builder: (_) => OfficeAdminHomePage(
+            adminName: adminName,
+            adminId: adminId,
+            adminDepartment: adminDepartment,
           ),
-      ));
+        ));
+      } else if (widget.specialRole != null) {
+        // ── Event / HR / Security Admin ───────────────────────────────
+        if (role != widget.specialRole) {
+          _dismissAndShowError("Unauthorized. This portal is for ${_portalTitle.replaceAll(' Portal', '')}s only.");
+          _generateCaptcha();
+          return;
+        }
+        if (data['status'] == 'disabled') {
+          _dismissAndShowError("Your account has been disabled. Please contact administration.");
+          _generateCaptcha();
+          return;
+        }
+        statusText.value = "Finalizing...";
+        // Auto-upgrade plaintext password to hashed
+        final updateData2 = <String, dynamic>{
+          'lastLogin': DateTime.now().toIso8601String(),
+        };
+        if (!AppwriteService.isHashed(storedPassword)) {
+          updateData2['password'] = AppwriteService.hashPassword(password);
+        }
+        await AppwriteService.databases.updateDocument(
+          databaseId: AppwriteService.databaseId,
+          collectionId: 'users',
+          documentId: doc.$id,
+          data: updateData2,
+        );
+        // Trigger lazy background cleanup of old accounts
+        AppwriteService.cleanupInactiveAccounts();
+        
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        final dept = data['department'] as String? ?? '';
+        Widget destination;
+        switch (widget.specialRole) {
+          case 'eventAdmin':
+            destination = EventAdminHomePage(adminName: adminName, adminId: adminId);
+            break;
+          case 'hrAdmin':
+            destination = HrAdminHomePage(adminName: adminName, adminId: adminId, adminDepartment: dept);
+            break;
+          case 'securityAdmin':
+          default:
+            destination = SecurityAdminHomePage(adminName: adminName, adminId: adminId);
+        }
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => destination));
+      } else {
+        // RBAC Security Check
+        if (role != 'admin' && role != 'dean') {
+          _dismissAndShowError("Unauthorized access. This portal is for Administrators only.");
+          _generateCaptcha();
+          return;
+        }
+
+        // ── Level enforcement ────────────────────────────────────────
+        final accountLevel = data['level'] is int ? data['level'] as int : 1;
+        if (accountLevel != widget.requiredLevel) {
+          _dismissAndShowError(
+            "These credentials belong to a Level $accountLevel account. "
+            "Please use the Level $accountLevel portal.",
+          );
+          _generateCaptcha();
+          captchaController.clear();
+          return;
+        }
+        // ────────────────────────────────────────────────────────────
+
+        // Check account status
+        if (data['status'] == 'disabled') {
+          _dismissAndShowError("Your admin account has been disabled. Please contact the Dean.");
+          _generateCaptcha();
+          return;
+        }
+
+        statusText.value = "Finalizing...";
+
+        // Auto-upgrade plaintext password to hashed
+        final updateData3 = <String, dynamic>{
+          'lastLogin': DateTime.now().toIso8601String(),
+        };
+        if (!AppwriteService.isHashed(storedPassword)) {
+          updateData3['password'] = AppwriteService.hashPassword(password);
+        }
+        await AppwriteService.databases.updateDocument(
+          databaseId: AppwriteService.databaseId,
+          collectionId: 'users',
+          documentId: doc.$id,
+          data: updateData3,
+        );
+
+        if (!mounted) return;
+        Navigator.of(context).pop();
+
+        Navigator.pushReplacement(context, MaterialPageRoute(
+          builder: (_) => AdminHomePage(
+            adminName: adminName,
+            adminId: adminId,
+            adminLevel: accountLevel,
+          ),
+        ));
+      }
     } catch (e) {
       _dismissAndShowError("An unexpected error occurred: $e");
     }
@@ -202,22 +364,37 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
                         fontSize: 18,
                         letterSpacing: 1.2),
                   ),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                        (route) => false,
-                      );
-                    },
-                    icon: const Icon(Icons.person_outline, color: Colors.white70, size: 18),
-                    label: const Text(
-                      "USER",
-                      style: TextStyle(
-                          color: Colors.white70, 
-                          fontWeight: FontWeight.bold, 
-                          fontSize: 12),
-                    ),
+                  Row(
+                    children: [
+                      // Level badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: _roleColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _roleColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          _badgeLabel,
+                          style: TextStyle(
+                            color: _roleColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close,
+                            color: Colors.white70, size: 20),
+                        tooltip: "Back to level select",
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -229,13 +406,13 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   Text(
-                    "Administrator Access",
+                  Text(
+                    _portalTitle,
                     style: AppTheme.headingWhite,
                   ),
                   const SizedBox(height: 8),
-                   Text(
-                    "Please authenticate to manage the system.",
+                  Text(
+                    _portalSubtitle,
                     style: AppTheme.subheadingGrey,
                   ),
                 ],
@@ -450,3 +627,4 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
     );
   }
 }
+

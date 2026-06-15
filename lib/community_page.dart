@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:file_picker/file_picker.dart';
@@ -7,9 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/appwrite_service.dart';
+import 'components/user_avatar.dart';
 
 // =============================================================================
-// CommunityPage â€” two tabs: Channel + Direct Messages
+// CommunityPage Ã¢â‚¬â€ two tabs: Channel + Direct Messages
 //
 // Appwrite collection: community_messages
 //   Fields: classId (string), channel (string), senderId (string),
@@ -78,7 +79,7 @@ class CommunityPage extends StatelessWidget {
         body: RisingSheet(
           child: TabBarView(
             children: [
-              // â”€â”€ Tab 0: Public class channel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // Ã¢â€â‚¬Ã¢â€â‚¬ Tab 0: Public class channel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
               _ChatView(
                 classId: classId,
                 channel: 'channel',
@@ -86,7 +87,7 @@ class CommunityPage extends StatelessWidget {
                 isAdmin: isAdmin,
                 showSenderName: true,
               ),
-              // â”€â”€ Tab 1: Direct Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // Ã¢â€â‚¬Ã¢â€â‚¬ Tab 1: Direct Messages Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
               isAdmin
                   ? _AdminDmListTab(
                       classId: classId,
@@ -109,7 +110,7 @@ class CommunityPage extends StatelessWidget {
 }
 
 // =============================================================================
-// Generic chat view â€” reused for channel and student DM
+// Generic chat view Ã¢â‚¬â€ reused for channel and student DM
 // =============================================================================
 class _ChatView extends StatefulWidget {
   final String classId;
@@ -164,7 +165,7 @@ class _ChatViewState extends State<_ChatView> {
   Future<void> _fetchMessages() async {
     try {
       final result = await AppwriteService.databases.listDocuments(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'community_messages',
         queries: [
           Query.equal('classId', widget.classId),
@@ -204,7 +205,7 @@ class _ChatViewState extends State<_ChatView> {
     setState(() => _sending = true);
     try {
       await AppwriteService.databases.createDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'community_messages',
         documentId: ID.unique(),
         data: {
@@ -256,7 +257,7 @@ class _ChatViewState extends State<_ChatView> {
           '/files/${uploaded.$id}/view?project=${AppwriteService.projectId}';
 
       await AppwriteService.databases.createDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'community_messages',
         documentId: ID.unique(),
         data: {
@@ -330,7 +331,7 @@ class _ChatViewState extends State<_ChatView> {
 }
 
 // =============================================================================
-// Admin DM list â€” lists enrolled students, tap to open thread
+// Admin DM list Ã¢â‚¬â€ lists enrolled students, tap to open thread
 // =============================================================================
 class _AdminDmListTab extends StatelessWidget {
   final String classId;
@@ -364,14 +365,16 @@ class _AdminDmListTab extends StatelessWidget {
           final studentId = studentIds[i];
           return FutureBuilder<models.Document>(
             future: AppwriteService.databases.getDocument(
-              databaseId: '69ecebfb0033cf785741',
+              databaseId: AppwriteService.databaseId,
               collectionId: 'users',
               documentId: studentId,
             ),
             builder: (context, snap) {
               String name = studentId;
+              String? profilePic;
               if (snap.hasData) {
                 name = snap.data!.data['name'] as String? ?? studentId;
+                profilePic = snap.data!.data['profilePictureId'] as String?;
               }
               return Container(
                 margin: const EdgeInsets.symmetric(
@@ -389,17 +392,12 @@ class _AdminDmListTab extends StatelessWidget {
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 4),
-                  leading: CircleAvatar(
+                  leading: UserAvatar(
+                    profilePictureId: profilePic,
+                    fallbackName: name,
                     radius: 22,
-                    backgroundColor:
-                        AppTheme.kGreen.withValues(alpha: 0.1),
-                    child: Text(
-                      name[0].toUpperCase(),
-                      style: GoogleFonts.poppins(
-                          color: AppTheme.kGreen,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18),
-                    ),
+                    backgroundColor: AppTheme.kGreen.withValues(alpha: 0.1),
+                    foregroundColor: AppTheme.kGreen,
                   ),
                   title: Text(name,
                       style: GoogleFonts.poppins(
@@ -431,7 +429,7 @@ class _AdminDmListTab extends StatelessWidget {
 }
 
 // =============================================================================
-// Full-screen DM thread page â€” admin navigates here
+// Full-screen DM thread page Ã¢â‚¬â€ admin navigates here
 // =============================================================================
 class _DmThreadPage extends StatelessWidget {
   final String classId;
@@ -785,6 +783,8 @@ class _InputBar extends StatelessWidget {
             child: TextField(
               controller: ctrl,
               maxLines: null,
+              maxLength: 1000,
+              buildCounter: (context, {required currentLength, required isFocused, required maxLength}) => null,
               keyboardType: TextInputType.multiline,
               decoration: InputDecoration(
                 hintText: "Type a message...",
@@ -824,3 +824,5 @@ class _InputBar extends StatelessWidget {
     );
   }
 }
+
+

@@ -70,25 +70,53 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
     return distance <= radiusMeters;
   }
 
-  static const String _verifyFaceEndpoint =
-      'https://pasteshub404-navikarana-backend.hf.space/login-face';
+  static String get _verifyFaceEndpoint => '${AppwriteService.mlBackendBase}/login-face';
 
   Future<String?> _verifyFace(File photo) async {
-    try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse(_verifyFaceEndpoint),
-      );
-      request.fields['username'] = widget.username;
-      request.files.add(await http.MultipartFile.fromPath('image', photo.path));
-      final streamed = await request.send();
-      final body = await streamed.stream.bytesToString();
-      final decoded = jsonDecode(body) as Map<String, dynamic>;
-      if (decoded['verified'] == true) return null;
-      return decoded['error'] as String? ?? 'Face not recognised.';
-    } catch (_) {
-      return 'Could not reach the server. Please check your connection.';
+    const maxAttempts = 3;
+    const initialDelay = Duration(seconds: 3);
+
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse(_verifyFaceEndpoint),
+        );
+        request.fields['username'] = widget.username;
+        request.files.add(await http.MultipartFile.fromPath('image', photo.path));
+        
+        if (mounted && attempt > 1) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('AI model warming up… Retry $attempt/$maxAttempts'),
+            duration: const Duration(seconds: 2),
+          ));
+        }
+
+        final streamed = await request.send().timeout(const Duration(seconds: 60));
+        final body = await streamed.stream.bytesToString();
+        
+        // If it's a 5xx (server cold start), retry
+        if (streamed.statusCode >= 500 && attempt < maxAttempts) {
+          await Future.delayed(initialDelay * attempt);
+          continue;
+        }
+
+        try {
+          final decoded = jsonDecode(body) as Map<String, dynamic>;
+          if (decoded['verified'] == true) return null;
+          return decoded['error'] as String? ?? 'Face not recognised.';
+        } catch (_) {
+          return 'Face verification failed (status ${streamed.statusCode}).';
+        }
+      } catch (e) {
+        if (attempt < maxAttempts) {
+          await Future.delayed(initialDelay * attempt);
+          continue;
+        }
+        return 'Could not reach the server. Please check your connection.';
+      }
     }
+    return "Face verification failed after $maxAttempts attempts.";
   }
 
   Future<String?> _uploadPhoto(File photo) async {
@@ -244,7 +272,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       }
 
       final classDoc = await AppwriteService.databases.getDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'classes',
         documentId: widget.classId,
       );
@@ -252,7 +280,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
           classDoc.data['createdBy'] ?? classDoc.data['adminId'] ?? '';
 
       await AppwriteService.databases.createDocument(
-        databaseId: '69ecebfb0033cf785741',
+        databaseId: AppwriteService.databaseId,
         collectionId: 'attendance_logs',
         documentId: ID.unique(),
         data: {
@@ -485,36 +513,24 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.className,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  widget.className,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
                 ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.classId,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: Colors.white60,
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  widget.classId,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.white60,
+                  ),
                 ),
               ],
             ),
@@ -542,7 +558,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         children: [
           FutureBuilder<models.DocumentList>(
             future: AppwriteService.databases.listDocuments(
-              databaseId: '69ecebfb0033cf785741',
+              databaseId: AppwriteService.databaseId,
               collectionId: 'attendance_logs',
               queries: [
                 Query.equal('userId', widget.username),
@@ -666,7 +682,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                     Expanded(
                       child: FutureBuilder<models.DocumentList>(
                         future: AppwriteService.databases.listDocuments(
-                          databaseId: '69ecebfb0033cf785741',
+                          databaseId: AppwriteService.databaseId,
                           collectionId: 'periods',
                           queries: [
                             Query.equal('classId', widget.classId),
@@ -692,7 +708,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
 
                           return FutureBuilder<models.DocumentList>(
                             future: AppwriteService.databases.listDocuments(
-                              databaseId: '69ecebfb0033cf785741',
+                              databaseId: AppwriteService.databaseId,
                               collectionId: 'attendance_logs',
                               queries: [
                                 Query.equal('userId', widget.username),
@@ -707,7 +723,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                                   ),
                                 );
 
-                              // Map logs by periodId â€” keep most recent if duplicates exist
+                              // Map logs by periodId Ã¢â‚¬â€ keep most recent if duplicates exist
                               Map<String, Map<String, dynamic>> logMap = {};
                               for (var log in logSnap.data!.documents) {
                                 final data = log.data;
@@ -920,7 +936,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       ),
       floatingActionButton: FutureBuilder<models.DocumentList>(
         future: AppwriteService.databases.listDocuments(
-          databaseId: '69ecebfb0033cf785741',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'periods',
           queries: [Query.equal('classId', widget.classId)],
         ),
@@ -954,7 +970,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
 
           return FutureBuilder<models.DocumentList>(
             future: AppwriteService.databases.listDocuments(
-              databaseId: '69ecebfb0033cf785741',
+              databaseId: AppwriteService.databaseId,
               collectionId: 'attendance_logs',
               queries: [
                 Query.equal('userId', widget.username),
@@ -1040,3 +1056,5 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
+
+

@@ -184,7 +184,7 @@
 | **URL Handling** | [`url_launcher`](https://pub.dev/packages/url_launcher) |
 | **Permissions** | [`permission_handler`](https://pub.dev/packages/permission_handler) |
 | **Local Storage** | [`path_provider`](https://pub.dev/packages/path_provider) |
-| **Cryptography** | `dart:convert` (SHA-256 password hashing) |
+| **Cryptography** | [`crypto`](https://pub.dev/packages/crypto) (SHA-256 password hashing) |
 
 ---
 
@@ -430,7 +430,6 @@ lib/
 ├── event_admin_home_page.dart         # Event Admin — distribution event management
 ├── dean_home_page.dart                # Dean — personnel, supervision, org chart, distribution
 │
-├── admin_login.dart                   # Shared admin login with role-based routing
 ├── admin_approval_requests_page.dart  # Pending student approvals with profile images
 ├── admin_hierarchy_views.dart         # L1/L2/L3 hierarchy UI components
 ├── admin_level_select_page.dart       # Admin level selector for tiered features
@@ -481,14 +480,17 @@ assets/
 | `periods` | Scheduled attendance windows | `classId`, `date`, `startTime`, `endTime` |
 | `community_messages` | Chat messages (channel & DM) | `classId`, `channel`, `senderId`, `text`, `fileUrl`, `fileType`, `fileName`, `timestamp`, `isAdmin` |
 | `leave_requests` | Leave request records | `userId`, `userName`, `leaveType`, `startDate`, `endDate`, `reason`, `status`, `approverLevel`, `actionBy` |
-| `distribution_events` | Distribution event records | `title`, `description`, `scheduledDate`, `location`, `createdBy`, `status`, `totalRecipients`, `issuedCount`, `assignedAdmins[]` |
+| `distribution_events` | Distribution events | `title`, `description`, `scheduledDate`, `location`, `createdBy`, `status`, `issuedCount`, `totalRecipients`, `createdAt` |
+| `event_recipients` | Distribution recipients | `eventId`, `userId`, `userName`, `status`, `issuedAt`, `issuedBy`, `acknowledgedAt`, `packageNote` |
+| `event_admin_assignments` | Admins assigned to events | `eventId`, `adminId`, `adminName`, `assignedBy`, `assignedAt`, `isActive` |
+| `distribution_scan_logs` | QR scan audit trail | `eventId`, `scannedUserId`, `scannedBy`, `action`, `timestamp` |
 
 ### Storage Buckets
 
 | Bucket | Purpose |
 |---|---|
 | `attendance_photos` | Selfie photos captured during attendance reporting |
-| `profile_pictures` | User profile pictures uploaded during registration |
+| Profile pictures bucket (custom ID) | User profile pictures uploaded during registration |
 | `community_files` | File attachments shared in community channels and DMs |
 
 ### Face Recognition API

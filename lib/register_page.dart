@@ -39,6 +39,16 @@ class _RegisterPageState extends State<RegisterPage> {
     "School of Arts, Sciences, Humanities & Education (SASHE)"
   ];
 
+  String? _selectedSecurityQuestion;
+  final securityAnswerController = TextEditingController();
+  final List<String> _securityQuestions = [
+    "What is your mother's maiden name?",
+    "What was the name of your first pet?",
+    "In what city were you born?",
+    "What is your favorite book?",
+    "What high school did you attend?"
+  ];
+
   File? _localPhoto;
   double? latitude;
   double? longitude;
@@ -91,6 +101,58 @@ class _RegisterPageState extends State<RegisterPage> {
                       trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.kGreen) : null,
                       onTap: () {
                         setState(() => _selectedSchool = school);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- NEW UX: SECURITY QUESTION SELECTOR ---
+  void _showSecurityQuestionPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(height: 20),
+              const Text("Select a Security Question", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _securityQuestions.length,
+                  itemBuilder: (context, index) {
+                    final question = _securityQuestions[index];
+                    final isSelected = _selectedSecurityQuestion == question;
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 30),
+                      title: Text(question, style: TextStyle(
+                        fontSize: 14, 
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? AppTheme.kGreen : Colors.black87
+                      )),
+                      trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.kGreen) : null,
+                      onTap: () {
+                        setState(() => _selectedSecurityQuestion = question);
                         Navigator.pop(context);
                       },
                     );
@@ -217,6 +279,8 @@ class _RegisterPageState extends State<RegisterPage> {
     'longitude': longitude,
     'status': 'pending',
     'role': 'student',
+    'securityQuestion': _selectedSecurityQuestion,
+    'securityAnswer': securityAnswerController.text.trim(),
   };
   if (profilePicId != null) {
     data['profilePictureId'] = profilePicId;
@@ -234,7 +298,18 @@ class _RegisterPageState extends State<RegisterPage> {
     if (_localPhoto == null) { _showSnackBar("Please add a photo first."); return; }
     if (latitude == null || longitude == null) { _showSnackBar("Please fetch your location first."); return; }
     if (passwordController.text != confirmPasswordController.text) { _showSnackBar("Passwords do not match."); return; }
-    if (_selectedSchool == null) { _showSnackBar("Please select your school."); return; }
+    if (_selectedSchool == null) {
+      _showSnackBar("Please select your department/school.");
+      return;
+    }
+    if (_selectedSecurityQuestion == null) {
+      _showSnackBar("Please select a security question.");
+      return;
+    }
+    if (securityAnswerController.text.trim().isEmpty) {
+      _showSnackBar("Please provide an answer to your security question.");
+      return;
+    }
 
     final existingUser = await AppwriteService.databases.listDocuments(
       databaseId: AppwriteService.databaseId,
@@ -487,6 +562,30 @@ class _RegisterPageState extends State<RegisterPage> {
                                       ),
                                     ),
                                   ),
+                                ),
+                                
+                                _sectionTitle("ACCOUNT RECOVERY"),
+                                GestureDetector(
+                                  onTap: _showSecurityQuestionPicker,
+                                  child: AbsorbPointer(
+                                    child: TextFormField(
+                                      decoration: AppTheme.inputDecoration(
+                                        _selectedSecurityQuestion ?? "Select Security Question", 
+                                        Icons.help_outline, 
+                                        isDropdown: true,
+                                      ),
+                                      style: GoogleFonts.poppins(
+                                        color: _selectedSecurityQuestion == null ? Colors.grey : Colors.black,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: securityAnswerController, 
+                                  textInputAction: TextInputAction.next,
+                                  decoration: AppTheme.inputDecoration("Your Answer", Icons.key_outlined),
                                 ),
                                 
                                 _sectionTitle("IDENTITY CHECK"),

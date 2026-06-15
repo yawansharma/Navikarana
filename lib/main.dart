@@ -1,4 +1,6 @@
 import 'dart:async'; // Required for Splash Screen Timer
+import 'package:flutter/services.dart';
+import 'forgot_password_page.dart';
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'register_page.dart';
@@ -414,7 +416,29 @@ class _LoginPageState extends State<LoginPage> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 40),
+                                const SizedBox(height: 12),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const ForgotPasswordPage(),
+                                        ),
+                                      );
+                                    },
+                                    child: const Text(
+                                      "Forgot Password?",
+                                      style: TextStyle(
+                                        color: AppTheme.kGreen,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
                                 SizedBox(
                                   width: double.infinity,
                                   height: 58,

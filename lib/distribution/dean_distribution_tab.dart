@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -30,7 +30,7 @@ class _DeanDistributionTabState extends State<DeanDistributionTab> {
     super.initState();
     _fetchEvents();
     _sub = AppwriteService.realtime.subscribe(
-        ['databases.6a2c10dc000d5e50f314.collections.distribution_events.documents']);
+        ['databases.${AppwriteService.databaseId}.collections.distribution_events.documents']);
     _sub!.stream.listen((_) {
       if (mounted) _fetchEvents();
     });
@@ -590,7 +590,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
       try {
         // Look up the user's display name
         final userQuery = await AppwriteService.databases.listDocuments(
-          databaseId: '6a2c10dc000d5e50f314',
+          databaseId: AppwriteService.databaseId,
           collectionId: 'users',
           queries: [Query.equal('username', uid), Query.limit(1)],
         );
@@ -673,7 +673,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                       // Merged and deduplicated client-side (no FTS index needed)
                       final byName = await AppwriteService.databases
                           .listDocuments(
-                        databaseId: '6a2c10dc000d5e50f314',
+                        databaseId: AppwriteService.databaseId,
                         collectionId: 'users',
                         queries: [
                           Query.startsWith('name', q.trim()),
@@ -682,7 +682,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                       );
                       final byId = await AppwriteService.databases
                           .listDocuments(
-                        databaseId: '6a2c10dc000d5e50f314',
+                        databaseId: AppwriteService.databaseId,
                         collectionId: 'users',
                         queries: [
                           Query.startsWith('username', q.trim()),
@@ -782,7 +782,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
             Future(() async {
               try {
                 final r = await AppwriteService.databases.listDocuments(
-                  databaseId: '6a2c10dc000d5e50f314',
+                  databaseId: AppwriteService.databaseId,
                   collectionId: 'users',
                   queries: [Query.equal('role', 'admin'), Query.limit(50)],
                 );

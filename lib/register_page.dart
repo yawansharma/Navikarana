@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
@@ -45,8 +45,7 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _fetchingLocation = false;
   bool _registeringFace = false;
 
-  static const String _backendBaseUrl = "https://pasteshub404-navikarana-backend.hf.space";
-  static const String _registerFaceEndpoint = "$_backendBaseUrl/register-face";
+  static const String _registerFaceEndpoint = "${AppwriteService.mlBackendBase}/register-face";
 
 
   @override
@@ -161,29 +160,58 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<String?> _registerFaceOnBackend() async {
     if (_localPhoto == null) return "No photo selected.";
-    try {
-      final request = http.MultipartRequest('POST', Uri.parse(_registerFaceEndpoint));
-      request.fields['username'] = uniqueCodeController.text.trim();
-      request.files.add(await http.MultipartFile.fromPath('image', _localPhoto!.path));
-      final streamedResponse = await request.send();
-      final responseBody = await streamedResponse.stream.bytesToString();
-      if (streamedResponse.statusCode == 200) return null;
+
+    // Retry logic for Hugging Face cold starts
+    const maxAttempts = 3;
+    const initialDelay = Duration(seconds: 3);
+
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
-        return decoded['error'] as String? ?? "Face registration failed.";
-      } catch (_) {
-        return "Face registration failed (status ${streamedResponse.statusCode}).";
+        final request = http.MultipartRequest('POST', Uri.parse(_registerFaceEndpoint));
+        request.fields['username'] = uniqueCodeController.text.trim();
+        request.files.add(await http.MultipartFile.fromPath('image', _localPhoto!.path));
+
+        if (mounted && attempt > 1) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('AI model warming up… Retry $attempt/$maxAttempts'),
+            duration: const Duration(seconds: 2),
+          ));
+        }
+
+        final streamedResponse = await request.send().timeout(
+          const Duration(seconds: 60),
+        );
+        final responseBody = await streamedResponse.stream.bytesToString();
+        if (streamedResponse.statusCode == 200) return null;
+
+        // If it's a 5xx (server cold start), retry
+        if (streamedResponse.statusCode >= 500 && attempt < maxAttempts) {
+          await Future.delayed(initialDelay * attempt);
+          continue;
+        }
+
+        try {
+          final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
+          return decoded['error'] as String? ?? "Face registration failed.";
+        } catch (_) {
+          return "Face registration failed (status ${streamedResponse.statusCode}).";
+        }
+      } catch (e) {
+        if (attempt < maxAttempts) {
+          await Future.delayed(initialDelay * attempt);
+          continue;
+        }
+        return "Could not reach the server. Please check your connection.";
       }
-    } catch (e) {
-      return "Could not reach the server. Please check your connection.";
     }
+    return "Face registration failed after $maxAttempts attempts.";
   }
 
   Future<void> _registerUserInAppwrite(String? profilePicId) async {
   final data = {
     'name': nameController.text.trim(),
     'username': uniqueCodeController.text.trim(),
-    'password': passwordController.text.trim(),
+    'password': AppwriteService.hashPassword(passwordController.text.trim()),
     'department': _selectedSchool,
     'latitude': latitude,
     'longitude': longitude,
@@ -195,7 +223,7 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   await AppwriteService.databases.createDocument(
-    databaseId: '6a2c10dc000d5e50f314',
+    databaseId: AppwriteService.databaseId,
     collectionId: 'users',
     documentId: ID.unique(),
     data: data,
@@ -209,12 +237,12 @@ class _RegisterPageState extends State<RegisterPage> {
     if (_selectedSchool == null) { _showSnackBar("Please select your school."); return; }
 
     final existingUser = await AppwriteService.databases.listDocuments(
-  databaseId: '6a2c10dc000d5e50f314',
-  collectionId: 'users',
-  queries: [
-    Query.equal('username', uniqueCodeController.text.trim()),
-  ],
-);
+      databaseId: AppwriteService.databaseId,
+      collectionId: 'users',
+      queries: [
+        Query.equal('username', uniqueCodeController.text.trim()),
+      ],
+    );
     if (existingUser.documents.isNotEmpty) { _showSnackBar("Unique ID already exists."); return; }
 
     setState(() => _registeringFace = true);
@@ -232,7 +260,7 @@ class _RegisterPageState extends State<RegisterPage> {
         final extension = _localPhoto!.path.split('.').last.toLowerCase();
         final filename = 'profile_${uniqueCodeController.text.trim()}_${DateTime.now().millisecondsSinceEpoch}.$extension';
         final uploadedFile = await AppwriteService.storage.createFile(
-          bucketId: '6a2c12a500260c940843',
+          bucketId: AppwriteService.profileBucketId,
           fileId: ID.unique(),
           file: InputFile.fromBytes(
             bytes: bytes,

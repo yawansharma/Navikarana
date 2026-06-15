@@ -1,4 +1,4 @@
-﻿import 'dart:async'; // Required for Splash Screen Timer
+import 'dart:async'; // Required for Splash Screen Timer
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'register_page.dart';
@@ -215,19 +215,26 @@ class _LoginPageState extends State<LoginPage> {
       final uniqueCode = uniqueCodeController.text.trim();
       final password = passwordController.text.trim();
 
+      // Query by username only — password verified client-side for dual-mode support
       final response = await AppwriteService.databases.listDocuments(
-  databaseId: '6a2c10dc000d5e50f314',
-  collectionId: 'users',
-  queries: [
-    Query.equal('username', uniqueCode),
-    Query.equal('password', password),
-  ],
-);
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'users',
+        queries: [
+          Query.equal('username', uniqueCode),
+        ],
+      );
 
-if (response.documents.isEmpty) {
-  _dismissDialogAndShow(statusText, "Invalid credentials.");
-  return;
-}
+      if (response.documents.isEmpty) {
+        _dismissDialogAndShow(statusText, "Invalid credentials.");
+        return;
+      }
+
+      // Dual-mode password verification (supports plaintext legacy + hashed)
+      final storedPassword = response.documents.first.data['password'] as String? ?? '';
+      if (!AppwriteService.verifyPassword(password, storedPassword)) {
+        _dismissDialogAndShow(statusText, "Invalid credentials.");
+        return;
+      }
 
       final data = response.documents.first.data;
 
@@ -253,14 +260,19 @@ if (response.documents.isEmpty) {
 
       statusText.value = "Finalizing...";
 
+      // Auto-upgrade plaintext password to hashed on successful login
+      final updateData = <String, dynamic>{
+        'lastLogin': DateTime.now().toIso8601String(),
+      };
+      if (!AppwriteService.isHashed(storedPassword)) {
+        updateData['password'] = AppwriteService.hashPassword(password);
+      }
       await AppwriteService.databases.updateDocument(
-  databaseId: '6a2c10dc000d5e50f314',
-  collectionId: 'users',
-  documentId: response.documents.first.$id,
-  data: {
-    'lastLogin': DateTime.now().toIso8601String(),
-  },
-);
+        databaseId: AppwriteService.databaseId,
+        collectionId: 'users',
+        documentId: response.documents.first.$id,
+        data: updateData,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop();

@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 
 class AppwriteService {
   static const String endpoint = 'https://sgp.cloud.appwrite.io/v1';
-  static const String projectId = '69ecea2600127cefd5b2';
+  static const String projectId = '6a2c0bd800121a164e77';
 
   // ── Centralized IDs ───────────────────────────────────────────────────────
   static const String databaseId = '6a2c10dc000d5e50f314';

@@ -211,6 +211,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
           documentId: doc.$id,
           data: updateData,
         );
+        // Trigger lazy background cleanup of old accounts
+        AppwriteService.cleanupInactiveAccounts();
+        
         if (!mounted) return;
         Navigator.of(context).pop();
         final adminDepartment = data['department'] as String? ?? '';
@@ -247,6 +250,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> with SingleTickerProvid
           documentId: doc.$id,
           data: updateData2,
         );
+        // Trigger lazy background cleanup of old accounts
+        AppwriteService.cleanupInactiveAccounts();
+        
         if (!mounted) return;
         Navigator.of(context).pop();
         final dept = data['department'] as String? ?? '';

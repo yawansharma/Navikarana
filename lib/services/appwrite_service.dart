@@ -51,4 +51,49 @@ class AppwriteService {
       return inputPlaintext == storedValue;
     }
   }
+
+  // ── Database Maintenance ───────────────────────────────────────────────────
+  /// Lazy-cleanup of inactive accounts. Deletes accounts where `lastLogin`
+  /// is older than the specified days. Removes both DB record and profile picture.
+  static Future<void> cleanupInactiveAccounts({int inactiveDays = 60}) async {
+    try {
+      final cutoffDate = DateTime.now().subtract(Duration(days: inactiveDays)).toIso8601String();
+      
+      // Query users where lastLogin is less than cutoffDate
+      final response = await databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: 'users',
+        queries: [
+          Query.lessThan('lastLogin', cutoffDate),
+          Query.limit(50), // Batch size to prevent timeouts
+        ],
+      );
+
+      for (var doc in response.documents) {
+        final data = doc.data;
+        
+        // 1. Delete profile picture if it exists
+        final profilePictureId = data['profilePictureId'] as String?;
+        if (profilePictureId != null && profilePictureId.isNotEmpty) {
+          try {
+            await storage.deleteFile(
+              bucketId: profileBucketId,
+              fileId: profilePictureId,
+            );
+          } catch (e) {
+            // Ignore storage errors (file might already be deleted)
+          }
+        }
+
+        // 2. Delete database record
+        await databases.deleteDocument(
+          databaseId: databaseId,
+          collectionId: 'users',
+          documentId: doc.$id,
+        );
+      }
+    } catch (e) {
+      // Fail silently in background to not disrupt admin login flow
+    }
+  }
 }

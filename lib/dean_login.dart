@@ -115,6 +115,8 @@ class _DeanLoginPageState extends State<DeanLoginPage> {
       } catch (_) {
         // Non-critical — login still succeeds even if update fails
       }
+      // Trigger lazy background cleanup of old accounts
+      AppwriteService.cleanupInactiveAccounts();
 
       if (!mounted) return;
       Navigator.pushReplacement(
